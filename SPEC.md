@@ -35,18 +35,25 @@ macOS one.** If it is turning out larger, something has gone wrong.
 What is genuinely harder here: there is no single window that can move between
 monitors, so output handling needs more care. See §6.
 
-## 3. Two levels of solution
+## 3. One solution, not two
 
-Ship both. They serve different users and the first costs almost nothing.
+An earlier version of this section proposed shipping two: a configuration-only
+version using Hyprland's own animated border, and the overlay. The argument was
+that the first cost almost nothing and someone should find out whether it was
+enough before installing anything.
 
-**Level 1, configuration only.** Hyprland already draws an animated gradient
-border on the focused window. Roughly ten lines of config, plus a small script
-to rotate the palette on a timer. This may be enough, and a user should find
-that out before installing anything.
+It was removed once the overlay worked. The border version is a different and
+lesser product — a thin rotating gradient where this draws a band of moving
+light — and "try it before installing" stopped being an argument when
+installing became one command. Keeping it meant maintaining it across both of
+Hyprland's config parsers, forever, for an audience that had ceased to exist.
 
-**Level 2, the overlay.** A layer-shell surface rendering the real shader:
-signed distance field band, outer bloom, domain-warped turbulence. This is what
-the rest of this document specifies.
+It lives outside this repository now, fixed, for anyone who still wants it.
+
+**The lesson worth keeping:** a fallback that competes with the product is not
+a fallback. If the cheap version is good enough to recommend, the expensive one
+is not worth building; if it is not, shipping it alongside only splits the
+first impression.
 
 ## 4. Platform and technology
 
@@ -72,7 +79,6 @@ reloading it on every focus change and every window move.
 
 ```
 nimbus-wayland/
-├── hyprland/            Level 1: config and the palette rotation script
 ├── shaders/ring.frag    GLSL, copied from the macOS project's demo page
 └── overlay/
     ├── src/
@@ -247,8 +253,9 @@ sharp on a scaled output, motion smooth and slow.
 **M4.** Flare, palette rotation, hide-while-dragging, tiled versus floating band
 widths.
 
-**M5.** Config file, packaging, and the level 1 Hyprland config in the same
-repository.
+**M5.** Config file and packaging. *Done:* settings in
+`~/.config/nimbus/config.json` with a control socket and a bar panel driving
+it, an AUR package, a one-line installer and a release tarball.
 
 ## 13. Open questions
 
@@ -261,5 +268,8 @@ repository.
 - **Does the outward glow spill onto neighbouring tiled windows badly enough to
   matter?** See §8. Answerable in five minutes by anyone running this on a tiled
   desktop, and not before.
-- **Does level 1 make level 2 unnecessary?** Genuinely unknown until the config
-  version has been used for a few weeks. That is the point of shipping it first.
+- ~~**Does the configuration-only version make the overlay unnecessary?**~~
+  *Answered: no, and the question was the wrong shape.* The two are not the
+  same product at different fidelities — one is a rotating line, the other is
+  a band of moving light. Shipping both split the first impression rather than
+  serving two audiences. See §3.

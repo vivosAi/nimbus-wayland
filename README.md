@@ -67,16 +67,6 @@ Click the mark in the bar. Every setting is a row, and the ten palettes sit in
 a grid showing their own colours rather than their names. Details in
 [omarchy/README.md](omarchy/README.md).
 
-## Without the overlay: the border trick
-
-Hyprland can animate its own window border's gradient, which is a much smaller
-effect than the ring — no bloom, no turbulence, no flare — but costs nothing to
-try and needs no program running. See [hyprland/](hyprland/).
-
-Note that it only works on Hyprland's older `hyprland.conf` format. Installs
-using the newer Lua configuration, which includes current Omarchy, need the
-Lua equivalents instead.
-
 ## What the ring actually is
 
 A signed distance field band straddling the window edge, with an outer bloom
