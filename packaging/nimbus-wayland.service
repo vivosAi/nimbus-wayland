@@ -1,0 +1,20 @@
+[Unit]
+Description=Draws an animated ring of light around the window that has keyboard focus
+Documentation=https://github.com/vivosAi/nimbus-wayland
+# Tied to the graphical session rather than to login: there is nothing to draw
+# on before a compositor exists, and nothing to draw on after one goes away.
+PartOf=graphical-session.target
+Requires=graphical-session.target
+After=graphical-session.target
+ConditionEnvironment=WAYLAND_DISPLAY
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nimbus-wayland
+Slice=session.slice
+# The compositor closing its socket is a normal end, not a fault; anything else
+# is worth coming back from.
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

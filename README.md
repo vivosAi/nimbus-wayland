@@ -4,55 +4,95 @@ Draws an animated ring of light around the window that has keyboard focus, so
 you never type into the wrong one.
 
 A port of [Nimbus for macOS](https://github.com/vivosAi/nimbus), which is
-shipped and working. This is not yet.
+shipped and working. This one runs: the same shader, ported from the Metal
+original, on a `wlr-layer-shell` surface.
 
-## Status
-
-**Configuration only, working today.** Ten lines of Hyprland config plus a
-script that rotates the color. See below.
-
-**The overlay, partly written.** The logic is done and tested: palettes, the
-flare curve, rotation, Hyprland event parsing, phase integration and coordinate
-conversion. 29 tests, all passing.
-
-The Wayland and GL layer is not written. It is gated to Linux in `Cargo.toml`,
-so everything above it builds and tests on any machine, which is how the logic
-got written without a Linux box to hand. Milestones are in
-[SPEC.md](SPEC.md) §12.
-
-## Try the config version first
-
-It may be enough, and it takes five minutes to find out.
+## Install
 
 ```sh
-cp hyprland/nimbus.conf ~/.config/hypr/nimbus.conf
-echo 'source = ~/.config/hypr/nimbus.conf' >> ~/.config/hypr/hyprland.conf
-hyprctl reload
+curl -fsSL https://raw.githubusercontent.com/vivosAi/nimbus-wayland/main/packaging/install.sh | bash
 ```
 
-Focused windows get a border whose gradient rotates continuously. The motion is
-the point: your eye stops seeing what never changes, so a static border works
-for a week and is invisible by the end of the month.
+That leaves you with the ring running, set to start at every login, and the
+control panel in your bar. There is nothing to double-click, because there is
+no window — Nimbus has no interface of its own, only the ring.
 
-To rotate the color as well, for the same reason on a longer timescale:
+On Arch the installer defers to the AUR, so upgrades and removal work with your
+normal tools. You can go there directly:
 
 ```sh
-install -Dm755 hyprland/nimbus-rotate-color.sh ~/.local/bin/nimbus-rotate-color
-echo 'exec-once = ~/.local/bin/nimbus-rotate-color --watch' >> ~/.config/hypr/hyprland.conf
+yay -S nimbus-wayland-bin        # prebuilt, installs in seconds
+yay -S nimbus-wayland            # builds from source
 ```
 
-Every 30 minutes it picks a new palette, never the current one and never one of
-the last three. Ten palettes, the same ones the macOS app ships with.
+Then, if you use the Omarchy bar:
 
-## What the overlay would add
+```sh
+nimbus-wayland install-bar
+```
 
-The config version is a rotating gradient. The macOS app draws a signed
-distance field band with an outer bloom and domain-warped turbulence, so the
-light moves *within* the ring rather than the whole ring rotating. It also
-flares brighter for a couple of seconds on a focus change and settles back.
+A package deliberately never writes into your home directory, so that one step
+is yours to take. If you would rather not, every setting the panel offers is
+also a command:
 
-Hyprland cannot express that in config. It needs a client drawing its own
-surface, which is what [SPEC.md](SPEC.md) describes.
+```sh
+nimbus-wayland color Aurora
+nimbus-wayland set idle_intensity 0.5
+nimbus-wayland --help
+```
+
+Settings live in `~/.config/nimbus/config.json`; a commented example is in
+[config.example.json](config.example.json).
+
+### From source
+
+```sh
+git clone https://github.com/vivosAi/nimbus-wayland
+cd nimbus-wayland/overlay
+cargo build --release
+```
+
+### Requirements
+
+A wlroots-based Wayland compositor with `wlr-layer-shell`, which in practice
+means **Hyprland 0.50 or newer** — Hyprland has required OpenGL ES 3.0 since
+that release, and so does this, so if the compositor runs then so does Nimbus.
+
+Focus tracking speaks Hyprland's IPC. Sway and Niri need a backend adding; the
+trait they would implement is already there.
+
+## The control panel
+
+Click the mark in the bar. Every setting is a row, and the ten palettes sit in
+a grid showing their own colours rather than their names. Details in
+[omarchy/README.md](omarchy/README.md).
+
+## Without the overlay: the border trick
+
+Hyprland can animate its own window border's gradient, which is a much smaller
+effect than the ring — no bloom, no turbulence, no flare — but costs nothing to
+try and needs no program running. See [hyprland/](hyprland/).
+
+Note that it only works on Hyprland's older `hyprland.conf` format. Installs
+using the newer Lua configuration, which includes current Omarchy, need the
+Lua equivalents instead.
+
+## What the ring actually is
+
+A signed distance field band straddling the window edge, with an outer bloom
+and domain-warped turbulence, so the light moves *within* the ring rather than
+the whole ring rotating. It flares brighter for a couple of seconds on a focus
+change and settles back, and the palette rotates every half hour, because
+anything constant fades from awareness.
+
+The shader is a direct port of `Shaders.metal` from the macOS project — the one
+the app ships, not the simplified one on its demo page. Same proportions, same
+noise, same premultiplied output, same four-quad vertex stage that shades only
+the band and never the window's interior.
+
+Hyprland cannot express any of that in configuration. It needs a client drawing
+its own surface, which is what [SPEC.md](SPEC.md) describes and what
+[overlay/](overlay/) implements.
 
 ## Why not a Hyprland plugin
 

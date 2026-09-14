@@ -1,0 +1,68 @@
+# Maintainer: vivosAi <https://github.com/vivosAi>
+#
+# Builds from a tagged release. For a prebuilt binary and no Rust toolchain,
+# see the nimbus-wayland-bin package instead.
+
+pkgname=nimbus-wayland
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Draws an animated ring of light around the window that has keyboard focus"
+arch=('x86_64' 'aarch64')
+url="https://github.com/vivosAi/nimbus-wayland"
+license=('MIT')
+
+# libEGL is opened at runtime rather than linked, so libglvnd is a dependency
+# even though it does not appear in the binary's link table.
+depends=('wayland' 'libglvnd' 'gcc-libs' 'libffi')
+makedepends=('rust' 'cargo')
+
+# The bar control is an Omarchy shell plugin; everything it does is also a
+# command, so Nimbus is fully usable without it.
+optdepends=('omarchy: bar control panel (run `nimbus-wayland install-bar`)')
+
+install="${pkgname}.install"
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')  # replaced with the real digest when the tag is cut
+
+prepare() {
+  cd "${pkgname}-${pkgver}/overlay"
+  cargo fetch --locked
+}
+
+build() {
+  cd "${pkgname}-${pkgver}/overlay"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo build --frozen --release
+}
+
+check() {
+  cd "${pkgname}-${pkgver}/overlay"
+  export RUSTUP_TOOLCHAIN=stable
+  # The logic layer tests need no compositor, which is the point of keeping it
+  # separate from the Wayland layer.
+  cargo test --frozen --release
+}
+
+package() {
+  cd "${pkgname}-${pkgver}"
+
+  install -Dm755 overlay/target/release/nimbus-wayland \
+    "${pkgdir}/usr/bin/nimbus-wayland"
+
+  install -Dm644 packaging/nimbus-wayland.service \
+    "${pkgdir}/usr/lib/systemd/user/nimbus-wayland.service"
+
+  # A package must not write into anyone's home, so the bar control is staged
+  # here and `nimbus-wayland install-bar` copies it in when the user asks.
+  install -Dm644 -t "${pkgdir}/usr/share/nimbus-wayland/omarchy/nimbus.ring" \
+    omarchy/nimbus.ring/manifest.json \
+    omarchy/nimbus.ring/Panel.qml \
+    omarchy/nimbus.ring/NimbusMark.qml
+
+  install -Dm644 config.example.json \
+    "${pkgdir}/usr/share/nimbus-wayland/config.example.json"
+
+  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+  install -Dm644 SPEC.md "${pkgdir}/usr/share/doc/${pkgname}/SPEC.md"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

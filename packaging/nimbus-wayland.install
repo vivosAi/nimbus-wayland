@@ -1,0 +1,39 @@
+# Printed by pacman after installing. This is where a package gets to say the
+# one thing it cannot do for you: anything inside your home directory.
+
+post_install() {
+  cat <<'MSG'
+
+  Nimbus is installed. To start it now and at every login:
+
+      systemctl --user enable --now nimbus-wayland
+
+  If you use the Omarchy bar, add the control panel:
+
+      nimbus-wayland install-bar
+
+  If you do not, every setting is a command instead:
+
+      nimbus-wayland set idle_intensity 0.5
+      nimbus-wayland color Aurora
+      nimbus-wayland --help
+
+  Either way the settings live in ~/.config/nimbus/config.json.
+  A commented example is at /usr/share/nimbus-wayland/config.example.json
+
+MSG
+}
+
+post_upgrade() {
+  cat <<'MSG'
+
+  Nimbus upgraded. Restart it to pick up the new build:
+
+      systemctl --user restart nimbus-wayland
+
+MSG
+}
+
+pre_remove() {
+  systemctl --user --global disable nimbus-wayland.service >/dev/null 2>&1 || true
+}
