@@ -100,7 +100,6 @@ struct FocusState {
     output: String,      // which monitor it is on
     rect: Rect,          // position and size, compositor coordinates
     fullscreen: bool,
-    floating: bool,      // tiled windows want a tighter ring, see §8
 }
 ```
 
@@ -149,24 +148,40 @@ macOS version needs one because AX notifications go missing. A socket is
 ordered and reliable, so polling would be solving a problem that does not exist
 here.
 
-## 8. Tiling changes the design, not the mechanism
+## 8. Where the band sits is a setting, not a deduction
 
-The mechanism is unaffected: the compositor reports a rect whether the window is
-tiled or floating.
+The mechanism is unaffected by tiling: the compositor reports a rect whether the
+window is tiled or floating.
 
-**The appearance is affected.** The macOS ring extends about 18pt beyond the
-window edge, which looks right when windows float and overlap. In a tiled layout
-neighbouring windows sit a few pixels apart, so that same glow spills onto the
-window next door. With `gaps_in = 0` it lands directly on top of it.
+**The appearance needs a choice.** The macOS ring straddles the window edge,
+roughly 6px inside and 18px outside, which looks right when windows float and
+overlap. In a tiled layout, neighbouring windows sit a few pixels apart, so that
+glow spills onto the window next door. With `gaps_in = 0` it lands on top of it.
 
-So:
+Expose it:
 
-- **Tiled windows:** draw the band mostly inside the window edge, with the bloom
-  pulled in tight. Roughly 8px inside and 4px outside as a starting point.
-- **Floating windows:** the macOS proportions are fine, since there is usually
-  empty space around them.
-- Take the value from `FocusState::floating` rather than making it a setting.
-  The right answer differs per window, not per user.
+```
+ring_placement = straddle   # default. 6px inside, 18px outside. The macOS look.
+ring_placement = inside     # entirely within the window edge. For tight gaps.
+```
+
+**Do not derive this from whether the window is floating.** Two reasons, and the
+first matters more:
+
+- **The ring would change shape as you toggle floating.** The whole value of
+  this is a marker you read without looking at it. Two shapes means learning
+  two markers, and a shape that changes under you is worse than either.
+- **Tiled does not mean cramped.** Gaps are configurable. Someone on
+  `gaps_in = 20` has room to spare and would resent losing the glow; someone on
+  `gaps_in = 0` needs it inside. Whether a window is tiled says nothing about
+  how much space is around it, so it is the wrong thing to branch on.
+
+Default to `straddle`, so Wayland looks like the screenshots and the demo page
+rather than being a quietly different product. Users with tight gaps switch
+once and never think about it again.
+
+`inside` costs a few pixels of window content, which is the trade and should be
+said plainly in the README rather than discovered.
 
 ## 9. Rendering
 
