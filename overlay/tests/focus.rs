@@ -53,6 +53,7 @@ fn state(address: &str) -> FocusState {
     FocusState {
         address: address.into(),
         output: "DP-1".into(),
+        class: "foot".into(),
         rect: Rect { x: 0, y: 0, w: 800, h: 600 },
         fullscreen: false,
     }

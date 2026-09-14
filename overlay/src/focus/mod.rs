@@ -1,6 +1,31 @@
 //! What has keyboard focus, and where it is.
 
+pub mod geometry;
 pub mod hyprland;
+pub mod tracker;
+
+/// Canonical form of a compositor window handle.
+///
+/// Hyprland reports the same window two different ways, which is not documented
+/// anywhere and was found by watching a live socket on 0.56.2:
+///
+/// ```text
+/// activewindowv2>>55593885e2e0          the event socket, bare hex
+/// "address": "0x55593885e2e0"           hyprctl -j clients, 0x-prefixed
+/// ```
+///
+/// Geometry has to be joined from `clients` onto an address that arrived from
+/// the socket, so comparing the two raw strings never matches — and it fails
+/// silently, as a ring that simply never appears. Normalize on the way in and
+/// the question cannot come up again.
+pub fn normalize_address(raw: &str) -> String {
+    let trimmed = raw.trim();
+    trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed)
+        .to_ascii_lowercase()
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rect {
@@ -27,6 +52,10 @@ pub struct FocusState {
     pub address: String,
     /// Which output it is on. Decides which surface draws.
     pub output: String,
+    /// The window's class, which is what an exclusion names. On macOS this is
+    /// the bundle ID; the role is the same — an escape hatch for applications
+    /// that misreport their geometry, rather than special cases in code.
+    pub class: String,
     pub rect: Rect,
     pub fullscreen: bool,
 }
@@ -55,9 +84,11 @@ pub enum Event {
     /// will not receive the next keystroke.
     Unfocused,
     /// A window is being moved or resized. Stand down until it comes to rest.
+    ///
+    /// There is deliberately no `Settled` counterpart. Hyprland has no "drag
+    /// finished" event, so rest is the absence of movement and only a clock can
+    /// measure it — see [`tracker::SETTLE_DELAY`].
     Moving(String),
-    /// The focused window finished moving.
-    Settled,
     OutputAdded(String),
     OutputRemoved(String),
     /// Workspace or monitor focus changed, so geometry should be re-read.

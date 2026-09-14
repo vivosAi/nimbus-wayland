@@ -1,37 +1,44 @@
-// Ring fragment shader, GLSL ES 1.00.
+#version 300 es
+// Ring fragment stage, GLSL ES 3.00.
 //
-// Lifted from the macOS project's demo page (docs/ring.js), which is itself a
-// port of Sources/Nimbus/Render/Shaders.metal. Three copies of this exist and
-// they are expected to drift; none of them is generated from the others.
+// A direct port of `ring_fragment` in the macOS project's
+// Sources/Nimbus/Render/Shaders.metal — the shader the app actually ships,
+// which draws the ring and nothing else and outputs premultiplied alpha.
 //
-// Uniforms are documented in SPEC.md section 9. Two rules matter: send an
-// accumulated phase rather than a timestamp, and clamp the per-frame delta.
+// It is deliberately NOT ported from docs/ring.js. That file is the web demo:
+// to show a ring in a browser it has to invent a desktop to put the ring
+// around, so it also draws two mock monitors, four mock windows and their
+// shadows, and composites everything itself into an opaque frame. Porting from
+// it drags all of that into an overlay that must be transparent, and loses the
+// `discard`s and the parameterised fBm along the way.
+//
+// Blend state on the GL side must match the macOS pipeline:
+//     glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
+//                         GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+//
+// Two rules carried over from SPEC.md §9, both of which were real bugs on
+// macOS before they were comments: send an accumulated phase rather than a
+// timestamp, and clamp the per-frame delta.
+
 precision highp float;
 
-uniform vec2  uResolution;
-uniform vec4  uWin0;         // x, y, w, h  (px, y up)
-uniform vec4  uWin1;
-uniform vec4  uWin2;
-uniform vec4  uWin3;
-uniform vec4  uScreen0;      // the two displays
-uniform vec4  uScreen1;
-uniform float uFocusIndex;   // 0..3
-uniform float uCornerRadius;
-uniform float uBandInner;
-uniform float uBandOuter;
-uniform float uFlowPhase;    // integrated, never time * speed
-uniform float uWarpPhase;
-uniform float uIntensity;
-uniform float uNoiseScale;
-uniform float uGlowFalloff;
-uniform vec3  uColorA;
-uniform vec3  uColorB;
-uniform vec3  uColorGlow;
+layout(std140) uniform Uniforms {
+    vec2 resolution;    //  0  drawable size in physical pixels
+    vec2 pad0;          //  8  .x carries the debug mode (0 = off)
+    vec4 windowRect;    // 16  x, y, w, h in pixels, bottom-left origin
+    vec4 colorA;        // 32  linear RGB in .xyz
+    vec4 colorB;        // 48
+    vec4 colorGlow;     // 64
+    vec4 params0;       // 80  cornerRadius, bandInner, bandOuter, flowPhase
+    vec4 params1;       // 96  intensity, warpPhase, noiseScale, glowFalloff
+};                      // 112 — std140 reproduces the Metal layout exactly
 
-float sdRoundBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
+in vec2 vPixel;
+out vec4 fragColor;
+
+// ---------------------------------------------------------------------------
+// Noise
+// ---------------------------------------------------------------------------
 
 float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
@@ -40,8 +47,9 @@ float hash21(vec2 p) {
 }
 
 float valueNoise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 w = f * f * (3.0 - 2.0 * f);
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 w = f * f * (3.0 - 2.0 * f);            // smoothstep interpolation
     float a = hash21(i);
     float b = hash21(i + vec2(1.0, 0.0));
     float c = hash21(i + vec2(0.0, 1.0));
@@ -49,165 +57,141 @@ float valueNoise(vec2 p) {
     return mix(mix(a, b, w.x), mix(c, d, w.x), w.y);
 }
 
-// Fixed octave counts rather than a loop bound, so this compiles on WebGL 1
-// where loop bounds must be constant.
-float fbm2(vec2 p) {
-    return (0.5 * valueNoise(p) + 0.25 * valueNoise(p * 2.0)) / 0.75;
-}
-float fbm3(vec2 p) {
-    return (0.5 * valueNoise(p) + 0.25 * valueNoise(p * 2.0)
-          + 0.125 * valueNoise(p * 4.0)) / 0.875;
-}
-
-// The space the monitors sit in.
-vec3 ambient(vec2 uv) {
-    float v = 1.0 - 0.7 * length(uv - vec2(0.5, 0.5));
-    return mix(vec3(0.012, 0.014, 0.022), vec3(0.028, 0.031, 0.044), v);
-}
-
-// Indexed with if/else rather than a uniform array: GLSL ES 1.00 restricts
-// dynamic indexing, and a few branches are clearer than fighting it.
-vec4 rectFor(float i) {
-    if (i < 0.5) return uWin0;
-    if (i < 1.5) return uWin1;
-    if (i < 2.5) return uWin2;
-    return uWin3;
-}
-
-// A display: the desktop surface plus a thin bezel edge, so two of them read as
-// two monitors rather than as one wide canvas. Multi-monitor is where losing
-// track of focus actually hurts, so the demo should look like it.
-vec4 screenPanel(vec2 p, vec4 rect) {
-    vec2 halfSize = rect.zw * 0.5;
-    vec2 c = rect.xy + halfSize;
-    float d = sdRoundBox(p - c, halfSize, 6.0);
-    if (d > 3.0) return vec4(0.0);
-
-    vec2 uv = (p - rect.xy) / rect.zw;
-    float v = 1.0 - 0.5 * length(uv - vec2(0.5, 0.58));
-    vec3 col = mix(vec3(0.047, 0.054, 0.078), vec3(0.078, 0.086, 0.121), v);
-    // Bezel: a bright hairline at the very edge.
-    col = mix(col, vec3(0.20, 0.22, 0.28), smoothstep(-2.0, -0.2, d));
-    return vec4(col, 1.0 - smoothstep(-0.5, 1.0, d));
-}
-
-// Real macOS windows cast a soft shadow, and its absence is most of why a
-// mock-up looks flat. The focused window gets a deeper one, as it does on a
-// real desktop.
-float windowShadow(vec2 p, vec4 rect, float focused) {
-    vec2 halfSize = rect.zw * 0.5;
-    vec2 c = rect.xy + halfSize - vec2(0.0, rect.w * 0.015);
-    float d = sdRoundBox(p - c, halfSize, uCornerRadius + 3.0);
-    float spread = rect.w * (0.045 + 0.035 * focused);
-    return exp(-max(d, 0.0) / spread) * (0.45 + 0.25 * focused);
-}
-
-// A window: body, title bar, traffic lights.
-vec4 windowLayer(vec2 p, vec4 rect, float focused) {
-    vec2 halfSize = rect.zw * 0.5;
-    vec2 c = rect.xy + halfSize;
-    float d = sdRoundBox(p - c, halfSize, uCornerRadius);
-    if (d > 1.0) return vec4(0.0);
-
-    float inside = 1.0 - smoothstep(-1.0, 1.0, d);
-
-    float barH = rect.w * 0.10;
-    float inBar = step(rect.y + rect.w - barH, p.y) * step(p.y, rect.y + rect.w);
-    vec3 body = mix(vec3(0.043, 0.051, 0.078), vec3(0.094, 0.102, 0.133), inBar);
-
-    // Unfocused windows sit back a little, the way macOS dims them — which is
-    // the very cue that is too subtle to rely on, and the reason this app exists.
-    body *= mix(0.82, 1.0, focused);
-
-    for (int i = 0; i < 3; i++) {
-        vec2 dotp = vec2(rect.x + barH * (0.9 + float(i) * 0.85),
-                         rect.y + rect.w - barH * 0.5);
-        float dd = length(p - dotp) - barH * 0.16;
-        body = mix(body, vec3(0.45), (1.0 - smoothstep(-0.6, 0.6, dd)) * 0.7);
+// fBm normalized to roughly 0…1. Octaves are per-call: the turbulence layers
+// only need two, and paying for three everywhere is wasted on an iGPU.
+//
+// GLSL ES 1.00 required constant loop bounds, which is why the WebGL demo had
+// to hand-unroll this into separate fbm2/fbm3 functions. ES 3.00 does not, so
+// this is the Metal original one-for-one rather than two copies to keep in
+// step.
+float fbm(vec2 p, int octaves) {
+    float sum = 0.0;
+    float amp = 0.5;
+    float norm = 0.0;
+    for (int i = 0; i < octaves; ++i) {
+        sum += amp * valueNoise(p);
+        norm += amp;
+        p *= 2.0;
+        amp *= 0.5;
     }
-
-    // Text-like lines, so it reads as a window with content in it.
-    for (int i = 0; i < 5; i++) {
-        float ly = rect.y + rect.w - barH * 2.2 - float(i) * rect.w * 0.085;
-        float lw = rect.z * (0.62 - mod(float(i) * 0.17, 0.34));
-        float inLine = step(rect.x + rect.z * 0.08, p.x) * step(p.x, rect.x + rect.z * 0.08 + lw)
-                     * step(ly - rect.w * 0.018, p.y) * step(p.y, ly + rect.w * 0.018);
-        body = mix(body, vec3(0.22, 0.24, 0.30), inLine * 0.9);
-    }
-
-    return vec4(body, inside);
+    return sum / max(norm, 1e-5);
 }
 
-// The ring itself — the part ported from Shaders.metal.
-vec4 ring(vec2 p, vec4 rect) {
-    vec2 halfSize = rect.zw * 0.5;
-    vec2 c = rect.xy + halfSize;
-    vec2 q = p - c;
-
-    float d = sdRoundBox(q, halfSize, uCornerRadius);
-    if (d > uBandOuter * 1.5 + uGlowFalloff * 5.0 || d < -uBandInner * 1.5) {
-        return vec4(0.0);
-    }
-
-    float theta = atan(q.y / max(halfSize.y, 1.0), q.x / max(halfSize.x, 1.0));
-    vec2 r = vec2(cos(theta), sin(theta));
-
-    vec2 wq = r * uNoiseScale + vec2(0.0, uWarpPhase);
-    vec2 warp = vec2(fbm2(wq), fbm2(wq + vec2(5.2, 1.3)));
-
-    float tongues = fbm3(r * uNoiseScale * 1.5 + warp * 1.15
-                         + vec2(uFlowPhase, -uFlowPhase * 0.55));
-    float detail = fbm2(r * uNoiseScale * 3.5
-                        - vec2(uFlowPhase * 1.6, uWarpPhase * 1.65));
-
-    float n = clamp(0.68 * tongues + 0.42 * detail, 0.0, 1.0);
-    n = smoothstep(0.12, 0.88, n);
-
-    float outerLocal = uBandOuter * (0.45 + 1.05 * n);
-    float glowLocal  = uGlowFalloff * (0.55 + 0.85 * n);
-
-    float band = smoothstep(outerLocal, 0.0, d) * smoothstep(-uBandInner, 0.0, d);
-    float glow = exp(-max(d, 0.0) / max(glowLocal, 0.5));
-
-    float across = clamp((d + uBandInner) / max(uBandInner + outerLocal, 1.0), 0.0, 1.0);
-    vec3 core = mix(uColorB, uColorA, n);
-    vec3 color = mix(core, uColorGlow, across * 0.55);
-
-    float bandAlpha = band * (0.30 + 0.70 * n);
-    float glowAlpha = glow * 0.32;
-    float alpha = clamp((bandAlpha + glowAlpha) * uIntensity, 0.0, 1.0);
-
-    vec3 premul = color * (bandAlpha * uIntensity) + uColorGlow * (glowAlpha * uIntensity);
-    return vec4(premul, alpha);
+// Signed distance to a rounded rectangle. Negative inside the window.
+float sdRoundBox(vec2 p, vec2 b, float r) {
+    vec2 q = abs(p) - b + r;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
+
+// ---------------------------------------------------------------------------
+// Fragment
+// ---------------------------------------------------------------------------
 
 void main() {
-    vec2 p = gl_FragCoord.xy;
-    vec3 col = ambient(p / uResolution);
-
-    vec4 s0 = screenPanel(p, uScreen0);
-    col = mix(col, s0.rgb, s0.a);
-    vec4 s1 = screenPanel(p, uScreen1);
-    col = mix(col, s1.rgb, s1.a);
-
-    // Index order is stacking order, back to front. Each window is preceded by
-    // its own shadow so it falls on what is behind it, not on itself.
-    for (int i = 0; i < 4; i++) {
-        float fi = float(i);
-        if (abs(fi - uFocusIndex) < 0.5) continue;
-        vec4 r = rectFor(fi);
-        col *= 1.0 - windowShadow(p, r, 0.0);
-        vec4 w = windowLayer(p, r, 0.0);
-        col = mix(col, w.rgb, w.a);
+    // Debug mode 1+: paint every rasterized fragment opaque blue. Combined with
+    // mode 2 this separates "the surface is not compositing" from "the ring
+    // geometry or shading produces nothing".
+    if (pad0.x >= 1.0) {
+        fragColor = vec4(0.0, 0.35, 1.0, 1.0);
+        return;
     }
 
-    vec4 fr = rectFor(uFocusIndex);
-    col *= 1.0 - windowShadow(p, fr, 1.0);
-    vec4 focused = windowLayer(p, fr, 1.0);
-    col = mix(col, focused.rgb, focused.a);
+    float cornerRadius = params0.x;
+    float bandInner    = params0.y;
+    float bandOuter    = params0.z;
+    // Phases, not times. The host integrates speed over elapsed time and sends
+    // the accumulated angle, because multiplying an absolute timestamp by a
+    // *changing* speed makes the phase leap by hundreds of radians the moment
+    // the speed changes — which is what a flare does. Integrating keeps the
+    // motion continuous through every speed change.
+    float flowPhase    = params0.w;
+    float intensity    = params1.x;
+    float warpPhase    = params1.y;
+    float noiseScale   = params1.z;
+    float glowFalloff  = params1.w;
 
-    vec4 r = ring(p, rectFor(uFocusIndex));
-    col = col * (1.0 - r.a) + r.rgb;
+    vec2 halfSize = windowRect.zw * 0.5;
+    vec2 center   = windowRect.xy + halfSize;
+    vec2 p        = vPixel - center;
 
-    gl_FragColor = vec4(col, 1.0);
+    float d = sdRoundBox(p, halfSize,
+                         min(cornerRadius, min(halfSize.x, halfSize.y)));
+
+    // Reject before touching any noise. Everything below costs real ALU.
+    if (d > bandOuter * 1.5 + glowFalloff * 5.0 || d < -bandInner * 1.5) {
+        discard;
+    }
+
+    // Position around the perimeter. Dividing by the half-extents before atan
+    // maps the rectangle onto a circle, so the motion travels at an even rate
+    // on a wide window instead of bunching up at the short edges. One extra
+    // divide versus a plain atan, and it is the difference between a 1920x200
+    // terminal looking right and looking lopsided.
+    float theta = atan(p.y / max(halfSize.y, 1.0),
+                       p.x / max(halfSize.x, 1.0));
+
+    // Sampling on a unit circle rather than on a 0…1 coordinate means the noise
+    // has no seam where the perimeter wraps. Every term below is either a
+    // function of this point or constant in theta, so seamlessness survives.
+    vec2 ring = vec2(cos(theta), sin(theta));
+
+    // Domain warping: noise used to displace the lookup of more noise. This is
+    // what separates fire from a moving highlight — it produces curling,
+    // folding structure instead of a rigid pattern sliding past. Drifting the
+    // warp on its own clock also means the ring keeps changing everywhere at
+    // once, not only where the rotation currently is.
+    vec2 q = ring * noiseScale + vec2(0.0, warpPhase);
+    vec2 warp = vec2(fbm(q, 2), fbm(q + vec2(5.2, 1.3), 2));
+
+    // Large, slow tongues traveling one way...
+    float tongues = fbm(ring * noiseScale * 1.5
+                        + warp * 1.15
+                        + vec2(flowPhase, -flowPhase * 0.55), 3);
+    // ...and finer, faster detail traveling the other, so the eye never
+    // resolves it into a single repeating loop.
+    float detail = fbm(ring * noiseScale * 3.5
+                       - vec2(flowPhase * 1.6, warpPhase * 1.65), 2);
+
+    float n = clamp(0.68 * tongues + 0.42 * detail, 0.0, 1.0);
+    // Widen the dynamic range. Without this the whole ring sits in a narrow
+    // band of brightness and reads as static.
+    n = smoothstep(0.12, 0.88, n);
+
+    // The band's outer edge and the bloom's reach both move with the noise.
+    // A ring whose *shape* changes reads as alive; one whose brightness alone
+    // changes reads as a light with a fault.
+    float outerLocal = bandOuter * (0.45 + 1.05 * n);
+    float glowLocal  = glowFalloff * (0.55 + 0.85 * n);
+
+    // A soft strip straddling the window edge. Both edges are feathered by at
+    // least 1.5px (enforced host-side) so there is no aliasing on the ring.
+    float band = smoothstep(outerLocal, 0.0, d) * smoothstep(-bandInner, 0.0, d);
+    float glow = exp(-max(d, 0.0) / max(glowLocal, 0.5));
+
+    if (band <= 0.0005 && glow <= 0.0025) {
+        discard;
+    }
+
+    // 0 at the inner edge of the band, 1 at the outer: lets the color cool as
+    // it reaches away from the window, the way a flame does.
+    float across = clamp((d + bandInner) / max(bandInner + outerLocal, 1.0),
+                         0.0, 1.0);
+
+    vec3 core       = mix(colorB.rgb, colorA.rgb, n);
+    vec3 bandColour = mix(core, colorGlow.rgb, across * 0.55);
+
+    // Keep a floor under the band so the ring is never fully dark anywhere
+    // along its length — dark gaps read as a broken ring rather than as motion.
+    float bandAlpha = band * (0.30 + 0.70 * n);
+    float glowAlpha = glow * 0.32;
+
+    float alpha = clamp((bandAlpha + glowAlpha) * intensity, 0.0, 1.0);
+
+    // Premultiplied output, matching the pipeline's blend state. Letting the
+    // color exceed the alpha makes the bloom read as light being added rather
+    // than as a gray film over whatever is behind it.
+    vec3 premultiplied = bandColour * (bandAlpha * intensity)
+                       + colorGlow.rgb * (glowAlpha * intensity);
+
+    fragColor = vec4(premultiplied, alpha);
 }

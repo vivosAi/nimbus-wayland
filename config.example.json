@@ -1,0 +1,56 @@
+{
+  "// ": "Copy to ~/.config/nimbus/config.json. Every key is optional; anything",
+  "//  ": "you leave out uses the macOS default. Unknown keys are ignored, and a",
+  "//   ": "bad value costs only its own setting, never the whole file.",
+
+  "enabled": true,
+
+  "// brightness": "Baseline once the flare settles. The Mac menu's Subtle /",
+  "// brightness ": "Normal / Loud are 0.18 / 0.30 / 0.50.",
+  "idle_intensity": 0.30,
+  "flare_duration": 2.5,
+
+  "// band_width": "thin (4,12) | normal (6,18) | thick (9,28), logical pixels",
+  "// band_width ": "inside and outside the window edge. The bloom scales with it.",
+  "band_width": "normal",
+
+  "// motion_speed": "calm | normal | lively  — 0.22 / 0.45 / 0.85 rad/s.",
+  "motion_speed": "normal",
+
+  "// turbulence": "smooth | normal | churny  — how fine the structure is.",
+  "turbulence": "normal",
+
+  "// frame_rate": "The setting that decides what this costs: cost is very",
+  "// frame_rate ": "nearly linear in frame rate and almost independent of the",
+  "// frame_rate  ": "shader. Drop it on a slow machine or to save battery.",
+  "frame_rate": 30,
+
+  "// palette_interval": "Seconds between colour changes; 0 never rotates.",
+  "palette_interval": 1800,
+  "disabled_palettes": [],
+
+  "// exclusions": "Window classes that never get a ring, e.g. [\"mpv\"].",
+  "// exclusions ": "Find one with: hyprctl -j activewindow | grep class",
+  "exclusions": [],
+
+  "// when you are away": "Seconds of no input before the ring stands down;",
+  "// when you are away ": "0 never goes idle. Needs ext_idle_notify_v1.",
+  "idle_threshold": 0,
+
+  "// idle_behavior": "freeze | always_animate | fade_out. freeze is the default",
+  "// idle_behavior ": "and stops the animation while leaving the ring on screen:",
+  "// idle_behavior  ": "walking back and seeing which window has focus, before",
+  "// idle_behavior   ": "touching anything, is the case this exists for.",
+  "idle_behavior": "freeze",
+
+  "// flare_on_return": "Pulse on the first input after being away.",
+  "flare_on_return": true,
+
+  "hide_in_fullscreen": true,
+  "hide_while_dragging": true,
+
+  "// debug_mode": "0 off. 1 paints every drawn fragment blue. 2 also replaces",
+  "// debug_mode ": "the ring with a full-screen quad, which separates \"the",
+  "// debug_mode  ": "surface is not compositing\" from \"the ring draws nothing\".",
+  "debug_mode": 0
+}

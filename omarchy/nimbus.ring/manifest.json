@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "nimbus.ring",
+  "name": "Nimbus",
+  "version": "1.0.0",
+  "author": "vivosAi",
+  "license": "MIT",
+  "description": "Control the Nimbus focus ring from the bar: switch it on or off, change colour, brightness, width, motion and frame rate.",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "Panel.qml" },
+  "barWidget": {
+    "displayName": "Nimbus",
+    "description": "The animated ring of light around the focused window.",
+    "category": "Appearance",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": { "refreshIntervalSec": 5 },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 5
+      }
+    ]
+  }
+}

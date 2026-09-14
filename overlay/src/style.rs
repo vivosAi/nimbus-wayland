@@ -16,6 +16,11 @@ pub struct Palette {
     pub a: [f32; 3],
     pub b: [f32; 3],
     pub glow: [f32; 3],
+    /// The authored sRGB hex, kept for anything that has to *show* the palette
+    /// rather than render with it — a swatch in a settings panel, say. Keeping
+    /// it beats converting the linear values back, which is lossy and would
+    /// make a swatch subtly disagree with the ring it stands for.
+    pub hex: [u32; 3],
 }
 
 pub const fn srgb_bytes(hex: u32) -> [f32; 3] {
@@ -45,7 +50,16 @@ fn linear(hex: u32) -> [f32; 3] {
 
 impl Palette {
     fn new(name: &'static str, a: u32, b: u32, glow: u32) -> Self {
-        Palette { name, a: linear(a), b: linear(b), glow: linear(glow) }
+        Palette { name, a: linear(a), b: linear(b), glow: linear(glow), hex: [a, b, glow] }
+    }
+
+    /// `#rrggbb` for the two band colours and the glow, for display.
+    pub fn hex_strings(&self) -> [String; 3] {
+        [
+            format!("#{:06x}", self.hex[0]),
+            format!("#{:06x}", self.hex[1]),
+            format!("#{:06x}", self.hex[2]),
+        ]
     }
 }
 
@@ -157,6 +171,9 @@ pub struct Rotator {
     previous: Option<[[f32; 3]; 3]>,
     fade_start: Option<f64>,
     recent: Vec<usize>,
+    /// Indices the timer may not choose. The config has modelled this from the
+    /// start; without it being applied here the setting did nothing.
+    disabled: Vec<usize>,
     pub fade_duration: f64,
 }
 
@@ -174,6 +191,7 @@ impl Rotator {
             previous: None,
             fade_start: None,
             recent: Vec::new(),
+            disabled: Vec::new(),
             fade_duration: 3.0,
         }
     }
@@ -186,19 +204,97 @@ impl Rotator {
         self.current
     }
 
-    /// Never the current palette, and never one of the last few. Relaxes the
-    /// recency rule rather than deadlocking when few are available.
+    /// The recently-used indices, so they can outlive a restart. Without
+    /// persisting these, restarting resets the recency rule and the first few
+    /// palettes come up far more often than the rest.
+    /// The palette names in index order, for anything that has to offer a
+    /// choice between them.
+    pub fn names(&self) -> Vec<&'static str> {
+        self.available.iter().map(|p| p.name).collect()
+    }
+
+    pub fn recent(&self) -> &[usize] {
+        &self.recent
+    }
+
+    /// Resume a rotation that was interrupted by a restart. Indices past the
+    /// end of the palette list are dropped rather than trusted: the list can
+    /// shrink between versions, or because the user disabled some.
+    pub fn restore(&mut self, current: usize, recent: &[usize]) {
+        if self.available.is_empty() {
+            return;
+        }
+        if current < self.available.len() {
+            self.current = current;
+        }
+        self.recent = recent
+            .iter()
+            .copied()
+            .filter(|i| *i < self.available.len())
+            .collect();
+        let excess = self.recent.len().saturating_sub(RECENT_MEMORY);
+        self.recent.drain(0..excess);
+    }
+
+    /// Switch off palettes by name. Unknown names are ignored: the list is
+    /// hand-editable and a typo should not take a palette out of rotation
+    /// silently, nor stop the others working.
+    pub fn set_disabled(&mut self, names: &[String]) {
+        self.disabled = self
+            .available
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| names.iter().any(|n| n.eq_ignore_ascii_case(p.name)))
+            .map(|(i, _)| i)
+            .collect();
+    }
+
+    pub fn is_disabled(&self, index: usize) -> bool {
+        self.disabled.contains(&index)
+    }
+
+    /// Never the current palette, never one switched off, and never one of the
+    /// last few. Relaxes the rules in that order rather than deadlocking.
     pub fn pick_next(&self, rng: &mut Rng) -> usize {
         if self.available.len() <= 1 {
             return self.current;
         }
+        let allowed = |i: &usize| *i != self.current && !self.disabled.contains(i);
+
         let mut candidates: Vec<usize> = (0..self.available.len())
-            .filter(|i| *i != self.current && !self.recent.contains(i))
+            .filter(|i| allowed(i) && !self.recent.contains(i))
             .collect();
         if candidates.is_empty() {
-            candidates = (0..self.available.len()).filter(|i| *i != self.current).collect();
+            // Recency is the first rule to give way; being switched off is not.
+            candidates = (0..self.available.len()).filter(allowed).collect();
+        }
+        if candidates.is_empty() {
+            // Everything but the current one is switched off, so stay put
+            // rather than ignoring the user and picking a disabled palette.
+            return self.current;
         }
         candidates[rng.next_usize(candidates.len())]
+    }
+
+    /// Switch to a palette by name, with the usual cross-fade. Returns false if
+    /// no palette has that name.
+    pub fn select_by_name(&mut self, name: &str, now: f64) -> bool {
+        let found = self
+            .available
+            .iter()
+            .position(|p| p.name.eq_ignore_ascii_case(name));
+        match found {
+            Some(index) => {
+                self.transition_to(index, now);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// The palettes themselves, for anything that has to show them.
+    pub fn palettes(&self) -> &[Palette] {
+        &self.available
     }
 
     pub fn transition_to(&mut self, index: usize, now: f64) {

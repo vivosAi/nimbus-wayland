@@ -146,3 +146,74 @@ fn mid_fade_lies_between_the_two_and_is_never_a_cut() {
     let mid = r.colors(r.fade_duration / 2.0)[0][2];
     assert!(mid >= from.min(to) - 1e-4 && mid <= from.max(to) + 1e-4);
 }
+
+/// The config has modelled `disabled_palettes` from the start; until the
+/// rotator was told about them the setting did nothing at all.
+#[test]
+fn the_timer_never_picks_a_palette_you_switched_off() {
+    let mut r = Rotator::new(palettes(), 0);
+    r.set_disabled(&["Toxic".into(), "magma".into()]);
+
+    let toxic = palettes().iter().position(|p| p.name == "Toxic").unwrap();
+    let magma = palettes().iter().position(|p| p.name == "Magma").unwrap();
+    assert!(r.is_disabled(toxic));
+    assert!(r.is_disabled(magma), "matching is case-insensitive");
+
+    let mut rng = Rng::new(7);
+    for step in 0..200 {
+        let next = r.pick_next(&mut rng);
+        assert_ne!(next, toxic, "picked a disabled palette at step {step}");
+        assert_ne!(next, magma, "picked a disabled palette at step {step}");
+        r.transition_to(next, step as f64);
+    }
+}
+
+/// Recency is the rule that gives way when choices run short. Being switched
+/// off is not — that is the user's instruction, not a preference of ours.
+#[test]
+fn recency_relaxes_before_a_disabled_palette_is_used() {
+    let all = palettes();
+    let keep: Vec<String> = all.iter().skip(2).map(|p| p.name.to_string()).collect();
+    let mut r = Rotator::new(all, 0);
+    r.set_disabled(&keep); // everything except the first two
+
+    let mut rng = Rng::new(3);
+    for step in 0..50 {
+        let next = r.pick_next(&mut rng);
+        assert!(next <= 1, "step {step} escaped the two that are left");
+        r.transition_to(next, step as f64);
+    }
+}
+
+/// With everything but the current palette switched off there is nothing to
+/// move to, and staying put beats overriding the user.
+#[test]
+fn all_but_one_disabled_stays_put_rather_than_disobeying() {
+    let all = palettes();
+    let others: Vec<String> = all.iter().skip(1).map(|p| p.name.to_string()).collect();
+    let mut r = Rotator::new(all, 0);
+    r.set_disabled(&others);
+    let mut rng = Rng::new(11);
+    assert_eq!(r.pick_next(&mut rng), 0);
+}
+
+#[test]
+fn a_palette_can_be_chosen_by_name() {
+    let mut r = Rotator::new(palettes(), 0);
+    assert!(r.select_by_name("aurora", 1.0), "names are case-insensitive");
+    assert_eq!(r.current().name, "Aurora");
+    assert!(!r.select_by_name("Chartreuse", 2.0), "an unknown name is refused");
+    assert_eq!(r.current().name, "Aurora", "and changes nothing");
+}
+
+/// The swatch a panel draws must be the colour the ring actually uses, so the
+/// authored hex is kept rather than converted back out of linear space.
+#[test]
+fn palettes_report_the_hex_they_were_authored_in() {
+    let ember = palettes()[0];
+    assert_eq!(ember.name, "Ember");
+    assert_eq!(
+        ember.hex_strings(),
+        ["#ff3d00".to_string(), "#ffc400".to_string(), "#ff6d00".to_string()]
+    );
+}

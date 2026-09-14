@@ -7,6 +7,7 @@ license = "MIT"
 repository = "https://github.com/vivosAi/nimbus-wayland"
 
 [dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
 
 # The Wayland and GL stack only exists on Linux. Keeping it behind a target
 # gate means the logic below it compiles and its tests run anywhere, which is
@@ -17,6 +18,10 @@ wayland-client = "0.31"
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 khronos-egl = { version = "6", features = ["dynamic"] }
 glow = "0.16"
+wayland-egl = "0.32"
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+calloop = "0.13"
+calloop-wayland-source = "0.3"
 
 [profile.release]
 lto = true
