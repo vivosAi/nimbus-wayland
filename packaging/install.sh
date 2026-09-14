@@ -153,12 +153,17 @@ if command -v omarchy >/dev/null 2>&1; then
   fi
 fi
 
+echo
+say "Nimbus is installed."
+# Queried, not asserted: whatever happened above, this reports what you actually
+# have. An install that ends by telling you what to *do* leaves anyone who does
+# not do it with no idea what state they are in.
+"$PREFIX/bin/$BIN_NAME" setup 2>/dev/null || nimbus-wayland setup 2>/dev/null || true
+
 cat <<'DONE'
+  Click between windows and watch the ring follow.
 
-  Nimbus is running. Click between windows and watch the ring follow.
-
-  Settings live in ~/.config/nimbus/config.json, and every one of them is
-  also a command:
+  Every setting is also a command:
 
       nimbus-wayland color Aurora
       nimbus-wayland set idle_intensity 0.5

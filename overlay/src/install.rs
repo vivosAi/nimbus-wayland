@@ -284,3 +284,44 @@ pub fn set_autostart(on: bool) -> Result<String, String> {
             .into())
     }
 }
+
+/// What you have, right now, in four lines.
+///
+/// Printed at the end of every install path. The old message told you what to
+/// *do* — "to start it at login, run this" — which leaves anyone who does not
+/// run it with no idea what they ended up with. This says what is true instead,
+/// and only then what to type.
+pub fn summary() -> String {
+    let running = crate::control::socket_path()
+        .is_some_and(|p| std::os::unix::net::UnixStream::connect(p).is_ok());
+    let at_login = autostart_enabled();
+    let bar = plugin_dir().is_some_and(|p| p.join("manifest.json").is_file());
+
+    let yes_no = |b: bool| if b { "yes" } else { "no" };
+    let mut out = format!(
+        "\n  Running now:      {}\n  Starts at login:  {}\n",
+        yes_no(running),
+        yes_no(at_login),
+    );
+    if omarchy_present() {
+        out.push_str(&format!("  Bar control:      {}\n", yes_no(bar)));
+    }
+
+    // Only the things that are not yet true, so a finished install says nothing
+    // further and an unfinished one says exactly what is left.
+    let mut todo: Vec<&str> = Vec::new();
+    if !running || !at_login {
+        todo.push("  Turn it on, now and at every login:\n      nimbus-wayland autostart on");
+    }
+    if omarchy_present() && !bar {
+        todo.push("  Add the control to your bar:\n      nimbus-wayland install-bar");
+    }
+    if !todo.is_empty() {
+        out.push('\n');
+        out.push_str(&todo.join("\n\n"));
+        out.push('\n');
+    }
+
+    out.push_str(&format!("\n  {}\n", config_hint()));
+    out
+}

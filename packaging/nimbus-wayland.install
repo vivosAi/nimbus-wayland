@@ -4,22 +4,20 @@
 post_install() {
   cat <<'MSG'
 
-  Nimbus is installed. To start it now and at every login:
+  Nimbus is installed, but not running and not set to start.
 
-      systemctl --user enable --now nimbus-wayland
+  Arch packages never enable services for you, so that step is yours:
 
-  If you use the Omarchy bar, add the control panel:
+      nimbus-wayland autostart on     starts it now, and at every login
+      nimbus-wayland install-bar      adds the control to the Omarchy bar
 
-      nimbus-wayland install-bar
+  To see what you have at any point:
 
-  If you do not, every setting is a command instead:
+      nimbus-wayland setup
 
-      nimbus-wayland set idle_intensity 0.5
-      nimbus-wayland color Aurora
-      nimbus-wayland --help
-
-  Either way the settings live in ~/.config/nimbus/config.json.
-  A commented example is at /usr/share/nimbus-wayland/config.example.json
+  Settings live in ~/.config/nimbus/config.json; a commented example is at
+  /usr/share/nimbus-wayland/config.example.json, and every setting is also a
+  command (nimbus-wayland --help).
 
 MSG
 }
@@ -29,7 +27,7 @@ post_upgrade() {
 
   Nimbus upgraded. Restart it to pick up the new build:
 
-      systemctl --user restart nimbus-wayland
+      nimbus-wayland quit && nimbus-wayland start
 
 MSG
 }

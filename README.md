@@ -25,15 +25,23 @@ yay -S nimbus-wayland-bin        # prebuilt, installs in seconds
 yay -S nimbus-wayland            # builds from source
 ```
 
-Then, if you use the Omarchy bar:
+A package installs files and nothing else — Arch never enables a service for
+you — so turning it on is a separate step:
 
 ```sh
-nimbus-wayland install-bar
+nimbus-wayland autostart on      # starts it now, and at every login
+nimbus-wayland install-bar       # adds the control to the Omarchy bar
 ```
 
-A package deliberately never writes into your home directory, so that one step
-is yours to take. If you would rather not, every setting the panel offers is
-also a command:
+At any point, `nimbus-wayland setup` says what you actually have:
+
+```
+  Running now:      yes
+  Starts at login:  yes
+  Bar control:      yes
+```
+
+Every setting the panel offers is also a command:
 
 ```sh
 nimbus-wayland start               # start it now

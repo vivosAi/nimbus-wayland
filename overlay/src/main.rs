@@ -74,6 +74,12 @@ fn main() {
             );
             return;
         }
+        // What you have, for a human. `status` is the machine-readable one and
+        // needs a running daemon; this works either way, which is the point.
+        ["setup"] => {
+            print!("{}", nimbus_wayland::install::summary());
+            return;
+        }
         ["autostart", state @ ("on" | "off")] => {
             match nimbus_wayland::install::set_autostart(*state == "on") {
                 Ok(m) => { println!("{m}"); return; }
@@ -161,6 +167,7 @@ nimbus-wayland — an animated ring of light around the focused window
   nimbus-wayland reload          re-read ~/.config/nimbus/config.json
   nimbus-wayland quit            stop the running overlay
 
+  nimbus-wayland setup           what you have: running, at login, bar control
   nimbus-wayland start           start it now
   nimbus-wayland autostart on    start it with every session (off to stop that)
   nimbus-wayland install-bar     add the control to the Omarchy bar
