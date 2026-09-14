@@ -28,6 +28,10 @@ Panel {
   // The name of the swatch under the pointer, shown on the Colour row so a
   // grid of unlabelled colours still tells you what you are about to pick.
   property string hoveredPalette: ""
+  // Whether Nimbus is set to start with the session. Asked of the binary rather
+  // than of the running daemon, because the question still has an answer when
+  // nothing is running — which is exactly when it matters.
+  property bool autostart: false
   property var palettes: []
 
   // The bar sizes a widget from its root item, and a bare Item has no implicit
@@ -67,12 +71,14 @@ Panel {
       options: ["freeze", "always_animate", "fade_out"],
       titles: ["Hold still", "Keep animating", "Hide the ring"] },
     { key: "hide_in_fullscreen", label: "Hide in full screen", kind: "toggle" },
-    { key: "hide_while_dragging", label: "Hide while dragging", kind: "toggle" }
+    { key: "hide_while_dragging", label: "Hide while dragging", kind: "toggle" },
+    { key: "__autostart", label: "Start at login", kind: "autostart" }
   ]
 
   function valueFor(key) { return settings ? settings[key] : undefined }
 
   function titleFor(row) {
+    if (row.kind === "autostart") return autostart ? "On" : "Off"
     if (row.kind === "toggle") return valueFor(row.key) ? "On" : "Off"
     if (row.kind === "colours") return hoveredPalette !== "" ? hoveredPalette : paletteName
     var v = valueFor(row.key)
@@ -91,6 +97,7 @@ Panel {
     // The Colour row itself steps to the next palette; the grid below is for
     // picking one directly.
     if (row.kind === "colours") { run(["next-color"]); return }
+    if (row.kind === "autostart") { run(["autostart", autostart ? "off" : "on"]); return }
     if (row.kind === "toggle") { apply(row.key, valueFor(row.key) ? "false" : "true"); return }
 
     var v = valueFor(row.key)
@@ -123,7 +130,10 @@ Panel {
 
   // --- talking to the daemon -------------------------------------------------
 
-  function refresh() { if (!status.running) status.running = true }
+  function refresh() {
+    if (!status.running) status.running = true
+    if (!autostartQuery.running) autostartQuery.running = true
+  }
 
   function adopt(text) {
     var parsed
@@ -153,11 +163,24 @@ Panel {
   // Process; the command's own reply is the fresh status, so there is no
   // round trip wasted re-asking.
   Process {
+    id: autostartQuery
+    command: ["nimbus-wayland", "autostart"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.autostart = String(text || "").trim() === "on"
+    }
+  }
+
+  Process {
     id: command
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.adopt(String(text || ""))
     }
+    // `start` and `autostart` answer in prose rather than JSON, and change
+    // whether there is a daemon at all, so the panel re-asks instead of trying
+    // to read their output.
+    onExited: Qt.callLater(root.refresh)
   }
 
   function run(args) {
@@ -280,14 +303,86 @@ Panel {
         PanelSeparator { width: parent.width }
 
         // ---------- When nothing is listening ----------
-        Text {
+        //
+        // A panel that can see Nimbus is not running, and then tells you to go
+        // and type a command, is a panel that has noticed the problem and
+        // declined to fix it. It can start it; so it does.
+        Column {
           visible: !root.present
           width: parent.width
-          wrapMode: Text.WordWrap
-          text: "Start it with:\n  nimbus-wayland &\n\nTo start it with every session, add this to\n~/.config/hypr/autostart.lua:\n  o.launch_on_start(\"nimbus-wayland\")"
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
+          spacing: Style.space(8)
+
+          Rectangle {
+            width: parent.width
+            implicitHeight: Style.space(34)
+            radius: Style.space(6)
+            color: startHover.containsMouse
+              ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.16)
+              : Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+            border.width: Style.space(1)
+            border.color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.25)
+
+            Text {
+              anchors.centerIn: parent
+              text: command.running ? "Starting…" : "Start Nimbus"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              font.bold: true
+            }
+
+            MouseArea {
+              id: startHover
+              anchors.fill: parent
+              hoverEnabled: true
+              onClicked: root.run(["start"])
+            }
+          }
+
+          Rectangle {
+            width: parent.width
+            implicitHeight: Style.space(30)
+            radius: Style.space(6)
+            color: loginHover.containsMouse
+              ? Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.10)
+              : "transparent"
+
+            Text {
+              anchors.left: parent.left
+              anchors.leftMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Start at login"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+            }
+            Text {
+              anchors.right: parent.right
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.autostart ? "On" : "Off"
+              color: root.autostart ? root.foreground : root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              font.bold: true
+            }
+
+            MouseArea {
+              id: loginHover
+              anchors.fill: parent
+              hoverEnabled: true
+              onClicked: root.run(["autostart", root.autostart ? "off" : "on"])
+            }
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: "Turning this on starts Nimbus now and at every session."
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
         }
 
         // ---------- Settings ----------
@@ -324,7 +419,8 @@ Panel {
               anchors.rightMargin: Style.space(8)
               anchors.verticalCenter: parent.verticalCenter
               text: root.titleFor(rowItem.modelData)
-              color: rowItem.modelData.kind === "toggle" && !root.valueFor(rowItem.modelData.key)
+              color: (rowItem.modelData.kind === "toggle" && !root.valueFor(rowItem.modelData.key))
+                  || (rowItem.modelData.kind === "autostart" && !root.autostart)
                 ? root.dim : root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.body

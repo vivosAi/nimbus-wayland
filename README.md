@@ -36,6 +36,8 @@ is yours to take. If you would rather not, every setting the panel offers is
 also a command:
 
 ```sh
+nimbus-wayland start               # start it now
+nimbus-wayland autostart on        # and at every session
 nimbus-wayland color Aurora
 nimbus-wayland set idle_intensity 0.5
 nimbus-wayland --help

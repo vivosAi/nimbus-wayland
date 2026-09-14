@@ -59,6 +59,27 @@ fn main() {
                 }
             }
         }
+        // Starting and autostart do not need a running Nimbus either; they are
+        // how you get one.
+        ["start"] => {
+            match nimbus_wayland::install::start() {
+                Ok(m) => { println!("{m}"); return; }
+                Err(e) => { eprintln!("nimbus: {e}"); std::process::exit(1); }
+            }
+        }
+        ["autostart"] => {
+            println!(
+                "{}",
+                if nimbus_wayland::install::autostart_enabled() { "on" } else { "off" }
+            );
+            return;
+        }
+        ["autostart", state @ ("on" | "off")] => {
+            match nimbus_wayland::install::set_autostart(*state == "on") {
+                Ok(m) => { println!("{m}"); return; }
+                Err(e) => { eprintln!("nimbus: {e}"); std::process::exit(1); }
+            }
+        }
         ["status"] => Request::Status,
         ["next-color" | "next-colour"] => Request::NextColor,
         ["color" | "colour", name] => Request::SetPalette((*name).to_string()),
@@ -140,6 +161,8 @@ nimbus-wayland — an animated ring of light around the focused window
   nimbus-wayland reload          re-read ~/.config/nimbus/config.json
   nimbus-wayland quit            stop the running overlay
 
+  nimbus-wayland start           start it now
+  nimbus-wayland autostart on    start it with every session (off to stop that)
   nimbus-wayland install-bar     add the control to the Omarchy bar
   nimbus-wayland uninstall-bar   take it back out
 

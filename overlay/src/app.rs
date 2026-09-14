@@ -868,6 +868,23 @@ impl Nimbus {
 // ---------------------------------------------------------------------------
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    // Refuse to be the second copy. Two overlays draw two rings on the same
+    // window, at twice the cost, and only one of them can hold the control
+    // socket -- so the panel would be talking to whichever won the race.
+    //
+    // Checked before any Wayland work, because the failure should be a clear
+    // sentence rather than a second surface appearing.
+    if let Some(path) = control::socket_path() {
+        if std::os::unix::net::UnixStream::connect(&path).is_ok() {
+            return Err(
+                "nimbus is already running.\n\
+                 Use `nimbus-wayland quit` to stop it, or `nimbus-wayland status` \
+                 to see what it is doing."
+                    .into(),
+            );
+        }
+    }
+
     let conn = Connection::connect_to_env()?;
     let (globals, event_queue) = registry_queue_init::<Nimbus>(&conn)?;
     let qh = event_queue.handle();

@@ -127,12 +127,14 @@ fi
 
 echo
 say "Starting Nimbus."
-systemctl --user daemon-reload >/dev/null 2>&1 || true
-if systemctl --user enable --now "$BIN_NAME.service" >/dev/null 2>&1; then
+# The binary knows how to do this: it installs a unit naming its own path if the
+# install did not ship one, which is what happens for a --user install into
+# ~/.local/bin where the packaged unit's /usr/bin path would point at nothing.
+if "$PREFIX/bin/$BIN_NAME" autostart on 2>/dev/null || nimbus-wayland autostart on 2>/dev/null; then
   note "running, and will start at every login"
 else
-  note "could not enable the service; starting it just for this session"
-  ( setsid "$PREFIX/bin/$BIN_NAME" >/dev/null 2>&1 & ) || true
+  note "could not set it to start at login; starting it for this session only"
+  "$PREFIX/bin/$BIN_NAME" start 2>/dev/null || nimbus-wayland start 2>/dev/null || true
 fi
 
 # ---------------------------------------------------------------------------
@@ -162,6 +164,7 @@ cat <<'DONE'
       nimbus-wayland set idle_intensity 0.5
       nimbus-wayland --help
 
-  To stop it:  systemctl --user disable --now nimbus-wayland
+  To stop it:            nimbus-wayland quit
+  To stop it starting:   nimbus-wayland autostart off
 
 DONE

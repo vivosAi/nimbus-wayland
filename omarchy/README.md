@@ -33,11 +33,17 @@ disagree about what is switched on. Changes are saved to
 If Nimbus is not running, the panel says so and tells you how to start it
 rather than showing stale settings.
 
+If Nimbus is not running, the panel says so and offers a **Start Nimbus**
+button and a **Start at login** switch, rather than telling you to go and type
+a command. Both are also rows in the panel once it is running.
+
 ## Without the bar
 
 Everything the panel does is a CLI subcommand:
 
 ```sh
+nimbus-wayland start               # start it now
+nimbus-wayland autostart on        # and at every session
 nimbus-wayland status              # everything, as JSON
 nimbus-wayland toggle              # ring on or off
 nimbus-wayland set frame_rate 20   # live, and saved
