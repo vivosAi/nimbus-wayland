@@ -1,0 +1,23 @@
+[package]
+name = "nimbus-wayland"
+version = "0.1.0"
+edition = "2021"
+description = "Draws an animated ring of light around the focused window"
+license = "MIT"
+repository = "https://github.com/vivosAi/nimbus-wayland"
+
+[dependencies]
+
+# The Wayland and GL stack only exists on Linux. Keeping it behind a target
+# gate means the logic below it compiles and its tests run anywhere, which is
+# where the bugs in the macOS version actually lived.
+[target.'cfg(target_os = "linux")'.dependencies]
+smithay-client-toolkit = "0.19"
+wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+khronos-egl = { version = "6", features = ["dynamic"] }
+glow = "0.16"
+
+[profile.release]
+lto = true
+opt-level = 3

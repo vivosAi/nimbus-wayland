@@ -11,8 +11,14 @@ shipped and working. This is not yet.
 **Configuration only, working today.** Ten lines of Hyprland config plus a
 script that rotates the color. See below.
 
-**The overlay, not written yet.** A layer-shell client rendering the real
-shader. Specified in [SPEC.md](SPEC.md), which is detailed enough to build from.
+**The overlay, partly written.** The logic is done and tested: palettes, the
+flare curve, rotation, Hyprland event parsing, phase integration and coordinate
+conversion. 29 tests, all passing.
+
+The Wayland and GL layer is not written. It is gated to Linux in `Cargo.toml`,
+so everything above it builds and tests on any machine, which is how the logic
+got written without a Linux box to hand. Milestones are in
+[SPEC.md](SPEC.md) §12.
 
 ## Try the config version first
 
