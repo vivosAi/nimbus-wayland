@@ -148,40 +148,26 @@ macOS version needs one because AX notifications go missing. A socket is
 ordered and reliable, so polling would be solving a problem that does not exist
 here.
 
-## 8. Where the band sits is a setting, not a deduction
+## 8. Tiling
 
-The mechanism is unaffected by tiling: the compositor reports a rect whether the
-window is tiled or floating.
+The mechanism is unaffected: the compositor reports a rect whether the window is
+tiled or floating, so nothing about finding or following the window changes.
 
-**The appearance needs a choice.** The macOS ring straddles the window edge,
-roughly 6px inside and 18px outside, which looks right when windows float and
-overlap. In a tiled layout, neighbouring windows sit a few pixels apart, so that
-glow spills onto the window next door. With `gaps_in = 0` it lands on top of it.
+**One thing to watch, unverified.** The macOS ring straddles the window edge,
+roughly 6px inside and 18px outside. That looks right when windows float and
+overlap. In a tiled layout, neighbouring windows sit a few pixels apart, so the
+outward part may land on the window next door, and with `gaps_in = 0` it would
+sit directly on top of it.
 
-Expose it:
+Whether that actually looks bad is unknown. Nobody has run this on a tiled
+desktop. The neighbour is dimmed, and a little light bleeding onto it may read
+perfectly naturally.
 
-```
-ring_placement = straddle   # default. 6px inside, 18px outside. The macOS look.
-ring_placement = inside     # entirely within the window edge. For tight gaps.
-```
-
-**Do not derive this from whether the window is floating.** Two reasons, and the
-first matters more:
-
-- **The ring would change shape as you toggle floating.** The whole value of
-  this is a marker you read without looking at it. Two shapes means learning
-  two markers, and a shape that changes under you is worse than either.
-- **Tiled does not mean cramped.** Gaps are configurable. Someone on
-  `gaps_in = 20` has room to spare and would resent losing the glow; someone on
-  `gaps_in = 0` needs it inside. Whether a window is tiled says nothing about
-  how much space is around it, so it is the wrong thing to branch on.
-
-Default to `straddle`, so Wayland looks like the screenshots and the demo page
-rather than being a quietly different product. Users with tight gaps switch
-once and never think about it again.
-
-`inside` costs a few pixels of window content, which is the trade and should be
-said plainly in the README rather than discovered.
+**So: ship the macOS proportions and look at it.** Do not add a setting for
+this before seeing it. A setting is a permanent admission that the question was
+never answered, and it costs every future user a choice they have no basis to
+make. If it does look wrong, the fix is one uniform, and the decision can be
+made by someone who has seen the problem.
 
 ## 9. Rendering
 
@@ -272,5 +258,8 @@ repository.
   properly from the start rather than being retrofitted.
 - **Which GL path.** `wgpu` is pleasant but heavy for one fragment shader. Raw
   EGL with GLES3 is smaller and more fiddly. Decide at M0, not M3.
+- **Does the outward glow spill onto neighbouring tiled windows badly enough to
+  matter?** See §8. Answerable in five minutes by anyone running this on a tiled
+  desktop, and not before.
 - **Does level 1 make level 2 unnecessary?** Genuinely unknown until the config
   version has been used for a few weeks. That is the point of shipping it first.
