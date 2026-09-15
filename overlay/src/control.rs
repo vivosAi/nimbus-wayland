@@ -134,12 +134,32 @@ pub fn merge_into_config_file(
     path: &PathBuf,
     settings: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<(), String> {
+    // A file that exists but does not parse is the user's, mid-edit or with a
+    // typo. Starting from an empty object and writing that back would replace
+    // every setting in it with the one just changed. Refusing costs them a
+    // message; the daemon has already applied the change live either way.
     let mut document = match std::fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str::<serde_json::Value>(&text)
-            .ok()
-            .and_then(|v| v.as_object().cloned())
-            .unwrap_or_default(),
-        Err(_) => serde_json::Map::new(),
+        Ok(text) => {
+            let value: serde_json::Value = serde_json::from_str(&text).map_err(|e| {
+                format!(
+                    "{} is not valid JSON ({e}); leaving it alone. \
+                     Fix or remove it, then try again.",
+                    path.display()
+                )
+            })?;
+            match value {
+                serde_json::Value::Object(map) => map,
+                _ => {
+                    return Err(format!(
+                        "{} is not a JSON object; leaving it alone.",
+                        path.display()
+                    ))
+                }
+            }
+        }
+        // No file yet is the normal first run.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => serde_json::Map::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
     };
 
     for (key, value) in settings {

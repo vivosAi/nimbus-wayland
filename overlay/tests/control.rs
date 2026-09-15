@@ -173,3 +173,28 @@ fn writing_to_a_file_that_does_not_exist_yet_creates_it() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_config_that_does_not_parse_is_left_exactly_as_it_was() {
+    let dir = std::env::temp_dir().join(format!("nimbus-test-broken-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.json");
+    // A trailing comma: the most likely thing a hand edit leaves behind.
+    let broken = "{\n  \"frame_rate\": 30,\n  \"band_width\": \"thick\",\n}\n";
+    std::fs::write(&path, broken).unwrap();
+
+    let mut change = serde_json::Map::new();
+    change.insert("enabled".into(), serde_json::json!(false));
+    let result = merge_into_config_file(&path, &change);
+
+    assert!(result.is_err(), "refuses rather than guessing");
+    assert!(result.unwrap_err().contains("not valid JSON"));
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        broken,
+        "the user's file is untouched, typo and all"
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
