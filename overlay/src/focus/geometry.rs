@@ -83,6 +83,45 @@ pub fn parse_monitors(json: &str) -> Result<Vec<Monitor>, String> {
     Ok(out)
 }
 
+/// One window object, as both `j/clients` and `j/activewindow` describe it.
+///
+/// `None` when it has no address, or reports a rect that cannot be a real
+/// window: a window that is mapped but not yet given a size reports zeros, and
+/// drawing a ring around nothing is worse than waiting for the next event.
+pub fn parse_client(c: &serde_json::Value, monitors: &[Monitor]) -> Option<FocusState> {
+    let address = normalize_address(c["address"].as_str()?);
+    if address.is_empty() {
+        return None;
+    }
+
+    let at = &c["at"];
+    let size = &c["size"];
+    let rect = Rect {
+        x: at[0].as_i64().unwrap_or(0) as i32,
+        y: at[1].as_i64().unwrap_or(0) as i32,
+        w: size[0].as_i64().unwrap_or(0) as i32,
+        h: size[1].as_i64().unwrap_or(0) as i32,
+    };
+    if !rect.is_sensible() {
+        return None;
+    }
+
+    // `monitor` is an integer id. Every other part of the program, and
+    // Wayland itself, identifies an output by name.
+    let monitor_id = c["monitor"].as_i64().unwrap_or(-1);
+    let output = monitors
+        .iter()
+        .find(|m| m.id == monitor_id)
+        .map(|m| m.name.clone())
+        .unwrap_or_default();
+
+    // `fullscreen` is a mode, not a flag: 0 none, 1 maximized, 2 fullscreen.
+    let fullscreen = c["fullscreen"].as_i64().unwrap_or(0) != 0;
+
+    let class = c["class"].as_str().unwrap_or_default().to_string();
+    Some(FocusState { address, output, class, rect, fullscreen })
+}
+
 /// Find one window in `j/clients` and turn it into a [`FocusState`].
 ///
 /// `address` may be in either of Hyprland's two spellings; both sides are
@@ -106,38 +145,27 @@ pub fn find_client(
         if normalize_address(raw) != wanted {
             continue;
         }
-
-        // A window that is mapped but not yet given a size reports a zero rect.
-        // Treat it as not found rather than drawing a ring around nothing; the
-        // next event will carry a real one.
-        let at = &c["at"];
-        let size = &c["size"];
-        let rect = Rect {
-            x: at[0].as_i64().unwrap_or(0) as i32,
-            y: at[1].as_i64().unwrap_or(0) as i32,
-            w: size[0].as_i64().unwrap_or(0) as i32,
-            h: size[1].as_i64().unwrap_or(0) as i32,
-        };
-        if !rect.is_sensible() {
-            return Ok(None);
-        }
-
-        // `monitor` is an integer id. Every other part of the program, and
-        // Wayland itself, identifies an output by name.
-        let monitor_id = c["monitor"].as_i64().unwrap_or(-1);
-        let output = monitors
-            .iter()
-            .find(|m| m.id == monitor_id)
-            .map(|m| m.name.clone())
-            .unwrap_or_default();
-
-        // `fullscreen` is a mode, not a flag: 0 none, 1 maximized, 2 fullscreen.
-        let fullscreen = c["fullscreen"].as_i64().unwrap_or(0) != 0;
-
-        let class = c["class"].as_str().unwrap_or_default().to_string();
-        return Ok(Some(FocusState { address: wanted, output, class, rect, fullscreen }));
+        return Ok(parse_client(c, monitors));
     }
     Ok(None)
+}
+
+/// Parse `j/activewindow`: one window object, or `{}` when nothing has focus.
+///
+/// This is the reply the geometry poll reads several times a second, which is
+/// why it exists alongside [`find_client`]: one small object rather than the
+/// whole client list, and no address to match because the compositor has
+/// already answered the question of which window.
+pub fn parse_active_window(
+    json: &str,
+    monitors: &[Monitor],
+) -> Result<Option<FocusState>, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| format!("activewindow: {e}"))?;
+    if !value.is_object() {
+        return Err("activewindow: expected an object".into());
+    }
+    Ok(parse_client(&value, monitors))
 }
 
 /// Read the current monitor list from the compositor.
@@ -150,4 +178,10 @@ pub fn monitors() -> Result<Vec<Monitor>, String> {
 pub fn locate(address: &str, monitors: &[Monitor]) -> Result<Option<FocusState>, String> {
     let json = request("j/clients").map_err(|e| format!("j/clients: {e}"))?;
     find_client(&json, address, monitors)
+}
+
+/// Read the focused window's geometry from the compositor, whichever it is.
+pub fn active_window(monitors: &[Monitor]) -> Result<Option<FocusState>, String> {
+    let json = request("j/activewindow").map_err(|e| format!("j/activewindow: {e}"))?;
+    parse_active_window(&json, monitors)
 }

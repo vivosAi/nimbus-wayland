@@ -46,6 +46,12 @@ pub fn parse_line(line: &str) -> Option<Event> {
         // Emitted with an empty payload when focus leaves every window.
         "activewindow" if data.trim().is_empty() || data.trim() == "," => Some(Event::Unfocused),
         "closewindow" => Some(Event::Rescan),
+        // `movewindow` fires when a window is *sent to another workspace*, not
+        // while it is being dragged. Hyprland 0.56 has no event for an
+        // interactive move or resize, and no `resizewindow` at all — checked
+        // against the event names compiled into the binary. The arm stays in
+        // case a release adds one. Following a window that changes shape is
+        // the geometry poll's job (`app::POLL_AT_REST`), not this parser's.
         "movewindowv2" | "movewindow" => Some(Event::Moving(first_address(data))),
         "resizewindow" => Some(Event::Moving(first_address(data))),
         "monitoradded" | "monitoraddedv2" => Some(Event::OutputAdded(first(data))),

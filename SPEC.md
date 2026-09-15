@@ -154,6 +154,14 @@ macOS version needs one because AX notifications go missing. A socket is
 ordered and reliable, so polling would be solving a problem that does not exist
 here.
 
+*Found in practice (0.56.2):* the event list above is optimistic. `movewindow`
+means "sent to another workspace" and there is no `resizewindow` at all, so an
+interactive move or resize produces no event whatsoever. The implementation
+polls the focused window's geometry while a ring is on screen — at rest every
+250 ms, 60 ms once a change is seen — and only then. That is not a re-sync
+timer: it compensates for events the compositor does not have, not for events
+it dropped, and it costs nothing while there is no ring to keep honest.
+
 ## 8. Tiling
 
 The mechanism is unaffected: the compositor reports a rect whether the window is

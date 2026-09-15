@@ -9,7 +9,10 @@
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use calloop::{EventLoop, LoopHandle};
+use calloop::{
+    timer::{TimeoutAction, Timer},
+    EventLoop, LoopHandle, RegistrationToken,
+};
 use calloop_wayland_source::WaylandSource;
 use khronos_egl as egl;
 use smithay_client_toolkit::{
@@ -46,6 +49,25 @@ mod fractional;
 mod idle;
 pub mod server;
 use fractional::FractionalScale;
+
+/// How often to ask where the focused window is while a ring is on screen and
+/// the window is at rest.
+///
+/// Hyprland has no event for an interactive move or resize — `movewindow`
+/// means "sent to another workspace", and there is no `resizewindow` at all —
+/// so a window that changes shape under a ring can only be noticed by asking.
+/// Four times a second is one small socket read each, and nothing at all runs
+/// when there is no ring to keep honest.
+const POLL_AT_REST: Duration = Duration::from_millis(250);
+
+/// How often to ask once a change has been seen. Fast enough that the ring
+/// lands on the window the moment it stops, rather than a quarter-second later.
+const POLL_WHILE_MOVING: Duration = Duration::from_millis(60);
+
+/// How long after the last observed change to keep polling at the fast rate.
+/// Comfortably longer than [`crate::focus::tracker::SETTLE_DELAY`], so the
+/// settle itself is observed at the fast rate too.
+const FAST_POLL_FOR: Duration = Duration::from_millis(500);
 
 /// The ring's proportions all come from [`crate::config`] now, which carries
 /// the macOS defaults verbatim. SPEC.md §8 is explicit that they ship unchanged
@@ -109,6 +131,16 @@ pub struct Nimbus {
     /// Kept so callbacks driven by something other than a Wayland event — the
     /// compositor socket, a pending deadline — can still ask for a frame.
     queue_handle: QueueHandle<Nimbus>,
+    /// For arming the pacing timer from inside a frame callback.
+    loop_handle: LoopHandle<'static, Nimbus>,
+    /// The pacing timer, while one is outstanding, so a second early frame
+    /// callback does not arm a second one.
+    pace_timer: Option<RegistrationToken>,
+    /// The geometry poll, while one is running. See [`POLL_AT_REST`].
+    poll_timer: Option<RegistrationToken>,
+    /// When the poll last saw the focused window change shape or place, which
+    /// decides between the two poll rates.
+    last_geometry_change: Option<Instant>,
     /// Hyprland's view of the outputs, for translating `clients[].monitor`.
     monitors: Vec<Monitor>,
     events: mpsc::Receiver<Event>,
@@ -144,8 +176,19 @@ impl Nimbus {
     }
 
     /// Turn a window address into a placed [`FocusState`], and tell the tracker.
+    ///
+    /// Asks for the focused window first, which is one small object, and falls
+    /// back to the whole client list only when the compositor's idea of focus
+    /// has already moved on. Hyprland 0.56 re-emits the focus event on every
+    /// title change — a terminal with a spinner in its title fires it once a
+    /// second — so the common case must be the cheap one.
     fn resolve(&mut self, address: &str) {
-        match geometry::locate(address, &self.monitors) {
+        let wanted = crate::focus::normalize_address(address);
+        let placed = match geometry::active_window(&self.monitors) {
+            Ok(Some(state)) if state.address == wanted => Ok(Some(state)),
+            _ => geometry::locate(address, &self.monitors),
+        };
+        match placed {
             Ok(Some(state)) => {
                 let now = self.now();
                 if self.tracker.focus(state, now) {
@@ -208,6 +251,7 @@ impl Nimbus {
     /// Advance the animation and paint every surface that needs it.
     fn render(&mut self, qh: &QueueHandle<Self>) {
         if !self.frame_is_due() {
+            self.arm_pace_timer();
             return;
         }
         self.last_frame = Some(Instant::now());
@@ -355,10 +399,44 @@ impl Nimbus {
     /// does.
     fn frame_is_due(&self) -> bool {
         let Some(last) = self.last_frame else { return true };
-        let budget = Duration::from_secs_f64(1.0 / self.config.frame_rate.max(1) as f64);
         // A small tolerance, or a frame that arrives a hair early is dropped and
         // the effective rate halves.
-        last.elapsed() + Duration::from_micros(500) >= budget
+        last.elapsed() + Duration::from_micros(500) >= self.frame_budget()
+    }
+
+    fn frame_budget(&self) -> Duration {
+        Duration::from_secs_f64(1.0 / self.config.frame_rate.max(1) as f64)
+    }
+
+    /// Come back when the rest of the frame budget has elapsed.
+    ///
+    /// Dropping an early frame callback also drops the request for the next
+    /// one, because callbacks are only re-armed by a paint. Without this,
+    /// nothing woke the loop again until the dispatch timeout, and the ring ran
+    /// at about 10 fps whatever `frame_rate` said: measured at 11.7 fps with
+    /// the setting at 60 on a 75 Hz display, one frame every 115 ms.
+    ///
+    /// A timer for the remainder rather than re-arming the callback, so the
+    /// loop wakes once per frame it intends to draw and not once per refresh.
+    fn arm_pace_timer(&mut self) {
+        if self.pace_timer.is_some() {
+            return;
+        }
+        let Some(last) = self.last_frame else { return };
+        let remaining = self.frame_budget().saturating_sub(last.elapsed());
+        let token = self.loop_handle.insert_source(
+            Timer::from_duration(remaining),
+            |_, _, state: &mut Nimbus| {
+                state.pace_timer = None;
+                let now = state.now();
+                if state.wants_frames(now) {
+                    let qh = state.queue_handle.clone();
+                    state.render(&qh);
+                }
+                TimeoutAction::Drop
+            },
+        );
+        self.pace_timer = token.ok();
     }
 
     /// Whether anything still needs drawing, or the loop can go quiet.
@@ -383,26 +461,113 @@ impl Nimbus {
     /// adds the reasons the *user* has given for not wanting a ring, which the
     /// tracker has no business knowing about.
     fn showing(&self, now: f64) -> Option<&FocusState> {
+        let state = self.tracker.visible(now)?;
+        self.user_allows(state).then_some(state)
+    }
+
+    /// The user's reasons for not wanting a ring around this window, as
+    /// distinct from the tracker's clock-based ones (unfocus grace, a drag in
+    /// progress). Separate because the geometry poll needs the first set
+    /// without the second: a window hidden mid-drag still has to be watched, or
+    /// nothing would notice when it comes to rest.
+    fn user_allows(&self, state: &FocusState) -> bool {
         if !self.config.enabled {
-            return None;
+            return false;
         }
         // The only idle behaviour that takes the ring away. `Freeze` keeps it,
         // which is the point: SPEC.md §10 is explicit that walking back and
         // looking at which window has focus, before touching anything, is the
         // case this program exists for.
         if self.idle && self.config.idle_behavior == IdleBehavior::FadeOut {
-            return None;
+            return false;
         }
-        let state = self.tracker.visible(now)?;
         // A full-screen window has no neighbours to be confused with, and a
         // ring over a film or a game is exactly where it is least wanted.
         if self.config.hide_in_fullscreen && state.fullscreen {
-            return None;
+            return false;
         }
         if self.config.exclusions.iter().any(|c| c == &state.class) {
-            return None;
+            return false;
         }
-        Some(state)
+        true
+    }
+
+    /// Whether the focused window's geometry is worth asking about.
+    ///
+    /// Not while idle: nobody is there to move anything, and a window that
+    /// changes on its own will say so with an event. Not when the user has
+    /// ruled the ring out: a fullscreen window cannot be resized, and leaving
+    /// fullscreen is an event.
+    fn wants_polling(&self) -> bool {
+        !self.idle && self.tracker.focused().is_some_and(|s| self.user_allows(s))
+    }
+
+    /// Start the geometry poll if it should be running and is not.
+    ///
+    /// Cheap to call anywhere the answer might have changed: a focus event, a
+    /// setting, coming back from idle.
+    fn ensure_poll(&mut self) {
+        if self.poll_timer.is_some() || !self.wants_polling() {
+            return;
+        }
+        let token = self.loop_handle.insert_source(
+            Timer::from_duration(POLL_AT_REST),
+            |_, _, state: &mut Nimbus| state.poll_geometry(),
+        );
+        self.poll_timer = token.ok();
+    }
+
+    /// One poll: where is the focused window now, and has it moved?
+    ///
+    /// SPEC.md §7 rules out a re-sync timer, and this is not one. It does not
+    /// compensate for events the compositor dropped; it compensates for events
+    /// the compositor does not have. A focus change seen here is left to the
+    /// event socket, which will report it properly and flare.
+    fn poll_geometry(&mut self) -> TimeoutAction {
+        if !self.wants_polling() {
+            self.poll_timer = None;
+            return TimeoutAction::Drop;
+        }
+        let Some(previous) = self.tracker.focused().cloned() else {
+            self.poll_timer = None;
+            return TimeoutAction::Drop;
+        };
+
+        match geometry::active_window(&self.monitors) {
+            Ok(Some(current)) if current.address == previous.address => {
+                let changed = current.rect != previous.rect
+                    || current.output != previous.output
+                    || current.fullscreen != previous.fullscreen;
+                if changed {
+                    let now = self.now();
+                    if self.config.hide_while_dragging {
+                        // Movement is the *absence* of rest; the tracker
+                        // measures rest with its clock, and each change seen
+                        // here pushes that clock forward.
+                        self.tracker.note_moving(now);
+                    }
+                    // Same address, so this never flares: SPEC.md §10.
+                    self.tracker.focus(current, now);
+                    self.last_geometry_change = Some(Instant::now());
+                    self.request_frame();
+                }
+            }
+            // A different window, or none: the event socket owns that change
+            // and will deliver it with the right side effects.
+            Ok(_) => {}
+            Err(e) => {
+                // The request socket failing means the compositor is going
+                // away, at which point there is nothing to poll.
+                eprintln!("nimbus: {e}");
+                self.poll_timer = None;
+                return TimeoutAction::Drop;
+            }
+        }
+
+        let recently_moving = self
+            .last_geometry_change
+            .is_some_and(|t| t.elapsed() < FAST_POLL_FOR);
+        TimeoutAction::ToDuration(if recently_moving { POLL_WHILE_MOVING } else { POLL_AT_REST })
     }
 }
 
@@ -501,6 +666,7 @@ impl Nimbus {
             }
         }
         self.request_frame();
+        self.ensure_poll();
     }
 
     /// Draw now, rather than at whatever time the next frame callback lands.
@@ -569,6 +735,7 @@ impl Nimbus {
         self.last_frame = None;
         let qh = self.queue_handle.clone();
         self.render(&qh);
+        self.ensure_poll();
     }
 
     fn config_as_json(&self) -> serde_json::Map<String, serde_json::Value> {
@@ -929,6 +1096,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (tx, events) = mpsc::channel();
     let (call_tx, calls) = mpsc::channel();
 
+    // Created before the state so the state can hold its handle: the pacing
+    // timer is armed from inside a Wayland callback, which only sees `Nimbus`.
+    let mut event_loop: EventLoop<'static, Nimbus> = EventLoop::try_new()?;
+    let handle: LoopHandle<'static, Nimbus> = event_loop.handle();
+
     let mut nimbus = Nimbus {
         registry_state: RegistryState::new(&globals),
         output_state: OutputState::new(&globals, &qh),
@@ -951,6 +1123,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap_or(0x2545_F491),
         ),
         queue_handle: qh.clone(),
+        loop_handle: handle.clone(),
+        pace_timer: None,
+        poll_timer: None,
+        last_geometry_change: None,
         monitors: geometry::monitors().unwrap_or_default(),
         events,
         calls,
@@ -981,9 +1157,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+    nimbus.ensure_poll();
 
-    let mut event_loop: EventLoop<Nimbus> = EventLoop::try_new()?;
-    let handle: LoopHandle<Nimbus> = event_loop.handle();
     WaylandSource::new(conn.clone(), event_queue).insert(handle.clone())?;
 
     // The compositor socket runs on its own thread; the Wayland loop owns the
@@ -1032,6 +1207,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         if state.wants_frames(now) {
             state.render(&qh);
         }
+        state.ensure_poll();
     })?;
 
     while !nimbus.exit {
@@ -1043,6 +1219,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         if nimbus.wants_frames(now) {
             nimbus.render(&qh);
         }
+        nimbus.ensure_poll();
     }
     Ok(())
 }

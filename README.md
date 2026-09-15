@@ -71,6 +71,16 @@ that release, and so does this, so if the compositor runs then so does Nimbus.
 Focus tracking speaks Hyprland's IPC. Sway and Niri need a backend adding; the
 trait they would implement is already there.
 
+### Following a window that moves
+
+Hyprland has no IPC event for a window being dragged or resized, so while a
+ring is on screen Nimbus asks the compositor where the window is four times a
+second — one small socket read each — and sixteen times a second once it sees
+the window changing, so the ring lands the moment the window stops. Nothing
+runs when there is no ring: nothing focused, fullscreen, excluded, switched off,
+or you have walked away. With `hide_while_dragging` on, the ring stands down
+while the window moves and returns a fifth of a second after it comes to rest.
+
 ## The control panel
 
 Click the mark in the bar. Every setting is a row, and the ten palettes sit in
