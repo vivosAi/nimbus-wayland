@@ -118,8 +118,7 @@ noise, same premultiplied output, same four-quad vertex stage that shades only
 the band and never the window's interior.
 
 Hyprland cannot express any of that in configuration. It needs a client drawing
-its own surface, which is what [SPEC.md](SPEC.md) describes and what
-[overlay/](overlay/) implements.
+its own surface, which is what [overlay/](overlay/) implements.
 
 ## Why not a Hyprland plugin
 
@@ -130,10 +129,12 @@ free.
 
 ## Contributing
 
-The spec is deliberately complete enough to implement from without having seen
-the macOS version. If you want to build it, that is the document to read, and
-sections 9 and 10 are the ones carrying hard-won detail rather than design
-opinion.
+Start with [overlay/src/focus/](overlay/src/focus/) for how focus is tracked and
+[overlay/src/render/](overlay/src/render/) for the shader and the GL path. Those
+two carry the detail that was expensive to learn: what Hyprland's IPC actually
+sends, and what a wrong scale factor does to a layer surface. A focus backend for
+Sway or Niri is the most useful thing anyone could add; the trait it would
+implement is already there.
 
 ## Licence
 

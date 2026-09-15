@@ -3,7 +3,7 @@
 //!
 //! Both delays below exist because of things Hyprland actually does, observed
 //! on 0.56.2 rather than read off the wiki. Neither is a re-sync timer of the
-//! kind SPEC.md §7 rules out: nothing here polls, and nothing here compensates
+//! kind that is ruled out: nothing here polls, and nothing here compensates
 //! for a dropped event. They debounce events that genuinely arrive.
 
 use super::FocusState;
@@ -20,7 +20,7 @@ use super::FocusState;
 /// activewindowv2>>55593885e2e0
 /// ```
 ///
-/// SPEC.md §10 says to draw nothing when nothing has focus, which is right —
+/// Drawing nothing when nothing has focus is right —
 /// but obeyed literally it hides the ring for a frame on *every* switch, which
 /// is the flicker M2 is supposed to rule out. So an empty event only counts
 /// once it has survived this long without a window arriving.
@@ -31,7 +31,7 @@ pub const UNFOCUS_GRACE: f64 = 0.10;
 
 /// How long after the last move or resize event a window counts as at rest.
 ///
-/// SPEC.md §10 says to hide the ring while a window is being dragged and
+/// The ring hides while a window is being dragged and
 /// restore it when the window comes to rest. Hyprland has no event for the
 /// second half — there is no "drag finished" — so `Event::Settled` has no
 /// producer and never will. Rest is the *absence* of movement, which can only

@@ -5,7 +5,7 @@
 //! anywhere — that split is deliberate, because the macOS version's real bugs
 //! all lived above this layer rather than in it.
 //!
-//! SPEC.md §4 left the GL path open. This is raw EGL with GLES3 rather than
+//! The GL path was left open. This is raw EGL with GLES3 rather than
 //! `wgpu`: Hyprland itself has required GLES 3.0 since 0.50, so every machine
 //! that can run the compositor can run this, and `wgpu` would add a shader
 //! translator and four backends for one fragment shader.
@@ -45,7 +45,7 @@ impl std::error::Error for Error {}
 /// The EGL display and context, shared by every output's surface.
 ///
 /// One context for all outputs: the surfaces must agree on phase anyway
-/// (SPEC.md §6), and a shared context means the program and uniform buffer are
+/// anyway, and a shared context means the program and uniform buffer are
 /// compiled and allocated once.
 pub struct GlContext {
     egl: Egl,
@@ -78,7 +78,7 @@ impl GlContext {
 
         // ALPHA_SIZE 8 is the one that matters. Without a destination alpha
         // channel the surface is opaque and the premultiplied output has
-        // nothing to blend into — the failure mode SPEC.md §13 describes, where
+        // nothing to blend into — the failure mode where
         // every frame renders correctly and composites to nothing.
         const OPENGL_ES3_BIT: egl::Int = 0x0040;
         let attribs = [
@@ -169,7 +169,7 @@ impl GlContext {
     }
 
     /// Clear a surface to nothing. Used when an output's surface should show no
-    /// ring — SPEC.md §6: only the output holding the focused window draws.
+    /// ring: only the output holding the focused window draws.
     pub fn clear(&self) {
         unsafe {
             self.gl.clear_color(0.0, 0.0, 0.0, 0.0);

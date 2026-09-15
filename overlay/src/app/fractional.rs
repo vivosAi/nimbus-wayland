@@ -1,6 +1,6 @@
 //! Fractional scaling, handled from the start rather than retrofitted.
 //!
-//! SPEC.md §13 puts this first among the open questions, and for a good
+//! This was the first risk worth worrying about, and for a good
 //! reason: a wrong scale factor was the worst bug in the macOS version, because
 //! every frame rendered correctly, presented correctly, and composited to
 //! nothing, with no error anywhere to say so.

@@ -16,7 +16,7 @@
 //     glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA,
 //                         GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 //
-// Two rules carried over from SPEC.md §9, both of which were real bugs on
+// Two rules carried over from the macOS version, both of which were real bugs on
 // macOS before they were comments: send an accumulated phase rather than a
 // timestamp, and clamp the per-frame delta.
 

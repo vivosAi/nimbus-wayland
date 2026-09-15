@@ -53,7 +53,7 @@ fn flare_fires_only_on_a_change_to_a_different_window() {
 
 /// Hyprland emits a transient empty `activewindowv2` in the middle of every
 /// focus change. Acting on it directly blinks the ring off on every switch,
-/// which is exactly the flicker milestone M2 exists to rule out.
+/// which is exactly the flicker this exists to rule out.
 #[test]
 fn the_transient_empty_focus_event_does_not_blink_the_ring() {
     let mut t = Tracker::default();
@@ -104,7 +104,7 @@ fn a_confirmed_unfocus_is_forgotten_so_the_next_window_flares() {
     );
 }
 
-/// SPEC.md §10: hide while dragging, restore when the window comes to rest.
+/// Hide while dragging, restore when the window comes to rest.
 /// Hyprland has no "drag finished" event, so rest is measured by a clock.
 #[test]
 fn the_ring_stands_down_for_a_drag_and_comes_back_at_rest() {

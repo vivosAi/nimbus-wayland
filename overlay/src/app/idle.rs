@@ -1,9 +1,8 @@
 //! Knowing when you have walked away.
 //!
-//! SPEC.md §10 is unusually firm about what idle must *not* do: "Idle stops the
-//! animation but must not remove the ring. Walking back to the machine and
-//! looking at which window has focus, before touching anything, is the case
-//! this exists for."
+//! What idle must *not* do is remove the ring. It stops the animation and
+//! leaves it: walking back to the machine and looking at which window has
+//! focus, before touching anything, is the case this exists for.
 //!
 //! So the default is to freeze, not to hide. Freezing costs the same as hiding
 //! — no frames either way — and keeps the one thing the program is for.

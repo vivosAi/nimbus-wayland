@@ -41,7 +41,7 @@ const vec2 kOffsets[6] = vec2[6](
 void main() {
     // Debug mode 2: one full-viewport quad, to test the surface and its
     // compositing in isolation from any of the ring geometry. This is the
-    // diagnostic for the failure SPEC.md §13 calls the worst bug in the macOS
+    // diagnostic for what was the worst bug in the macOS
     // version — every frame rendering correctly and compositing to nothing,
     // with no error anywhere. A wrong Wayland scale factor fails the same way.
     if (pad0.x >= 2.0) {

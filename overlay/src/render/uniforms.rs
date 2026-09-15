@@ -118,7 +118,7 @@ impl Uniforms {
     ///
     /// A diagnostic, not a feature, and the one worth keeping: it separates
     /// "the surface is not compositing" from "the ring geometry produces
-    /// nothing". SPEC.md §13 calls a wrong scale factor the worst bug in the
+    /// nothing". A wrong scale factor was the worst bug in the
     /// macOS version precisely because it fails silently in the first way.
     pub fn debug_mode(&self) -> f32 {
         self.pad0[0]

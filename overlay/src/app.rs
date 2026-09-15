@@ -70,8 +70,8 @@ const POLL_WHILE_MOVING: Duration = Duration::from_millis(60);
 const FAST_POLL_FOR: Duration = Duration::from_millis(500);
 
 /// The ring's proportions all come from [`crate::config`] now, which carries
-/// the macOS defaults verbatim. SPEC.md §8 is explicit that they ship unchanged
-/// and get looked at before anyone reaches for a setting — that has now
+/// the macOS defaults verbatim. They ship unchanged and get looked at before
+/// anyone reaches for a setting — that has now
 /// happened, on a tiled desktop, and they were right.
 
 /// Whether an output's surface is drawing this frame, and at what size.
@@ -194,7 +194,7 @@ impl Nimbus {
     fn place(&mut self, state: FocusState) {
         let now = self.now();
         if self.tracker.focus(state, now) {
-            // SPEC.md §10: the flare fires only on a change to a different
+            // The flare fires only on a change to a different
             // window, never on a geometry update, or dragging keeps it lit and
             // it never settles.
             self.animator.flare(now);
@@ -459,7 +459,7 @@ impl Nimbus {
 
     /// Whether anything still needs drawing, or the loop can go quiet.
     ///
-    /// SPEC.md §10: idle stops the animation but must not remove the ring.
+    /// Idle stops the animation but must not remove the ring.
     /// Walking back to the machine and looking at which window has focus,
     /// before touching anything, is the case this exists for — so going quiet
     /// must mean "stop advancing the pattern", never "stop showing the ring".
@@ -493,7 +493,7 @@ impl Nimbus {
             return false;
         }
         // The only idle behaviour that takes the ring away. `Freeze` keeps it,
-        // which is the point: SPEC.md §10 is explicit that walking back and
+        // which is the point: walking back and
         // looking at which window has focus, before touching anything, is the
         // case this program exists for.
         if self.idle && self.config.idle_behavior == IdleBehavior::FadeOut {
@@ -537,7 +537,7 @@ impl Nimbus {
 
     /// One poll: where is the focused window now, and has it moved?
     ///
-    /// SPEC.md §7 rules out a re-sync timer, and this is not one. It does not
+    /// A re-sync timer is ruled out, and this is not one. It does not
     /// compensate for events the compositor dropped; it compensates for events
     /// the compositor does not have. A focus change seen here is left to the
     /// event socket, which will report it properly and flare.
@@ -564,7 +564,7 @@ impl Nimbus {
                         // here pushes that clock forward.
                         self.tracker.note_moving(now);
                     }
-                    // Same address, so this never flares: SPEC.md §10.
+                    // Same address, so this never flares.
                     self.tracker.focus(current, now);
                     self.last_geometry_change = Some(Instant::now());
                     self.request_frame();
@@ -804,7 +804,7 @@ impl CompositorHandler for Nimbus {
         // Integer scale is the fallback for compositors without
         // `wp_fractional_scale_v1`. Where that protocol is present it wins, and
         // this is ignored — mixing the two is how you end up rendering at the
-        // wrong size, which SPEC.md §13 calls the worst bug in the macOS
+        // wrong size, which was the worst bug in the macOS
         // version because it fails silently.
         for s in &mut self.surfaces {
             if s.layer.wl_surface() == surface {
@@ -891,7 +891,7 @@ impl OutputHandler for Nimbus {
         self.reload_monitors();
     }
 
-    /// SPEC.md §6: a monitor unplugged while holding the ring must not leave a
+    /// A monitor unplugged while holding the ring must not leave a
     /// surface behind.
     fn output_destroyed(
         &mut self,
@@ -900,9 +900,8 @@ impl OutputHandler for Nimbus {
         output: wl_output::WlOutput,
     ) {
         // Destroy the scale and viewport objects with the surface. Leaving
-        // them behind leaks a protocol object per hotplug, and SPEC.md §6 is
-        // explicit that unplugging a monitor while it holds the ring must not
-        // leave a surface behind.
+        // them behind leaks a protocol object per hotplug, and unplugging a
+        // monitor while it holds the ring must not leave a surface behind.
         self.surfaces.retain_mut(|s| {
             if s.output == output {
                 s.fractional.destroy();
@@ -1019,7 +1018,7 @@ impl Nimbus {
 
         let surface = self.compositor.create_surface(qh);
 
-        // Click-through. SPEC.md §2: on macOS this needs `ignoresMouseEvents`;
+        // Click-through. On macOS this needs `ignoresMouseEvents`;
         // here it is an empty input region, and without it the overlay would
         // swallow every click on the desktop.
         if let Ok(region) = smithay_client_toolkit::compositor::Region::new(&self.compositor) {

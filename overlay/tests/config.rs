@@ -144,7 +144,7 @@ fn missing_or_broken_state_is_not_fatal() {
 }
 
 /// The idle defaults are the macOS ones, and the important one is
-/// `Freeze` rather than `FadeOut`: SPEC.md §10 is explicit that walking back to
+/// `Freeze` rather than `FadeOut`: walking back to
 /// the machine and looking at which window has focus, before touching
 /// anything, is the case this program exists for. Hiding the ring while you are
 /// away removes it exactly when it is most wanted.

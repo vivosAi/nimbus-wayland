@@ -1,6 +1,6 @@
 //! Where the focused window is, and on which output.
 //!
-//! SPEC.md §5's table claims the compositor's event carries position and size.
+//! The compositor's event was expected to carry position and size.
 //! It does not — §7 concedes as much — so geometry is a separate question asked
 //! over Hyprland's *writable* socket.
 //!
