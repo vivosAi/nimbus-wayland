@@ -21,12 +21,18 @@ That leaves you with the ring running, set to start at every login, and the
 control panel in your bar. There is nothing to double-click, because there is
 no window — Nimbus has no interface of its own, only the ring.
 
-On Arch the installer defers to the AUR, so upgrades and removal work with your
-normal tools. You can go there directly:
+**AUR package: not published yet.** Arch Linux disabled all pushes to the AUR
+in August 2026 while it works through an ongoing supply-chain attack — over
+1,500 packages compromised platform-wide. That is not specific to this
+project; nobody can publish a new AUR package right now. Once it lifts, `yay
+-S nimbus-wayland-bin` will be the fast path here, and the installer above
+will defer to it automatically the way it already does for every other
+Arch package. Until then, the curl installer above works on Arch too, or
+build straight from source:
 
 ```sh
-yay -S nimbus-wayland-bin        # prebuilt, installs in seconds
-yay -S nimbus-wayland            # builds from source
+git clone https://github.com/vivosAi/nimbus-wayland && cd nimbus-wayland/overlay
+cargo build --release
 ```
 
 A package installs files and nothing else — Arch never enables a service for
