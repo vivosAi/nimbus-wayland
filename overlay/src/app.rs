@@ -164,15 +164,44 @@ impl Nimbus {
         self.started.elapsed().as_secs_f64()
     }
 
-    /// Re-read the focused window's geometry from the compositor.
+    /// Ask the compositor what has focus now, and where it is.
     ///
     /// Called for events that change where a window is without saying where it
-    /// went, which is most of them.
+    /// went, which is most of them. It asks *what is focused*, not *where is
+    /// the window I remember*. The difference showed up on a switch to an empty
+    /// workspace: Hyprland sends the empty focus event and the workspace event
+    /// one millisecond apart, and a rescan that looked the remembered window up
+    /// in the client list found it, still on the other workspace with a good
+    /// rect, and handed it back as a fresh focus. That cancelled the pending
+    /// unfocus and left a ring around a window that was not on screen.
     fn rescan(&mut self) {
-        let Some(address) = self.tracker.focused().map(|s| s.address.clone()) else {
+        if self.tracker.focused().is_none() {
             return;
-        };
-        self.resolve(&address);
+        }
+        match geometry::active_window(&self.monitors) {
+            Ok(Some(state)) => self.place(state),
+            // Nothing has focus. The grace period in the tracker still applies,
+            // so the transient empty event mid-switch stays harmless.
+            Ok(None) => {
+                let now = self.now();
+                self.tracker.note_unfocus(now);
+            }
+            Err(e) => eprintln!("nimbus: {e}"),
+        }
+    }
+
+    /// Hand a placed window to the tracker, flaring if it is a different one.
+    fn place(&mut self, state: FocusState) {
+        let now = self.now();
+        if self.tracker.focus(state, now) {
+            // SPEC.md §10: the flare fires only on a change to a different
+            // window, never on a geometry update, or dragging keeps it lit and
+            // it never settles.
+            self.animator.flare(now);
+            if std::env::var_os("NIMBUS_DEBUG").is_some() {
+                eprintln!("nimbus: flare at {now:.3}");
+            }
+        }
     }
 
     /// Turn a window address into a placed [`FocusState`], and tell the tracker.
@@ -189,18 +218,7 @@ impl Nimbus {
             _ => geometry::locate(address, &self.monitors),
         };
         match placed {
-            Ok(Some(state)) => {
-                let now = self.now();
-                if self.tracker.focus(state, now) {
-                    // SPEC.md §10: the flare fires only on a change to a
-                    // different window, never on a geometry update, or dragging
-                    // keeps it lit and it never settles.
-                    self.animator.flare(now);
-                    if std::env::var_os("NIMBUS_DEBUG").is_some() {
-                        eprintln!("nimbus: flare at {now:.3}");
-                    }
-                }
-            }
+            Ok(Some(state)) => self.place(state),
             // A window we cannot place is a window we cannot ring. This happens
             // briefly while a window is mapping.
             Ok(None) => {
@@ -552,9 +570,17 @@ impl Nimbus {
                     self.request_frame();
                 }
             }
-            // A different window, or none: the event socket owns that change
-            // and will deliver it with the right side effects.
-            Ok(_) => {}
+            // Nothing has focus. Usually the event socket has already said so;
+            // if it has not, or said so and was overruled, this puts the ring
+            // out within a poll interval. The tracker's grace period debounces
+            // it exactly as it does the event.
+            Ok(None) => {
+                let now = self.now();
+                self.tracker.note_unfocus(now);
+            }
+            // A different window: the event socket owns that change and will
+            // deliver it with the flare it deserves.
+            Ok(Some(_)) => {}
             Err(e) => {
                 // The request socket failing means the compositor is going
                 // away, at which point there is nothing to poll.
