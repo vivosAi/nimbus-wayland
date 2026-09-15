@@ -30,12 +30,10 @@ every change goes out as `nimbus-wayland set`, so the panel and the ring cannot
 disagree about what is switched on. Changes are saved to
 `~/.config/nimbus/config.json`, leaving any other keys in that file untouched.
 
-If Nimbus is not running, the panel says so and tells you how to start it
-rather than showing stale settings.
-
 If Nimbus is not running, the panel says so and offers a **Start Nimbus**
-button and a **Start at login** switch, rather than telling you to go and type
-a command. Both are also rows in the panel once it is running.
+button and a **Start at login** switch, rather than showing stale settings or
+telling you to go and type a command. Both are also rows in the panel once it
+is running.
 
 ## Without the bar
 

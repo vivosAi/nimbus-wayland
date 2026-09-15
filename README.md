@@ -1,11 +1,15 @@
 # Nimbus for Wayland
 
-Draws an animated ring of light around the window that has keyboard focus, so
-you never type into the wrong one.
+The Linux and Wayland version of Nimbus. The macOS one is at
+[vivosAi/nimbus](https://github.com/vivosAi/nimbus).
 
-A port of [Nimbus for macOS](https://github.com/vivosAi/nimbus), which is
-shipped and working. This one runs: the same shader, ported from the Metal
-original, on a `wlr-layer-shell` surface.
+Draws an animated ring of light around the window that has keyboard focus, so
+you never type into the wrong one. You can always see where your pointer is;
+you cannot see where your keyboard is, and on a large screen you end up typing
+into the wrong window.
+
+The same shader as the Mac, ported from the Metal original, drawn on a
+`wlr-layer-shell` surface. Runs on Hyprland today.
 
 ## Install
 
@@ -64,12 +68,14 @@ cargo build --release
 
 ### Requirements
 
-A wlroots-based Wayland compositor with `wlr-layer-shell`, which in practice
-means **Hyprland 0.50 or newer** — Hyprland has required OpenGL ES 3.0 since
-that release, and so does this, so if the compositor runs then so does Nimbus.
+A Wayland compositor that offers `wlr-layer-shell` and OpenGL ES 3.0. In
+practice that means **Hyprland 0.50 or newer**: Hyprland has required GLES 3.0
+since that release, and so does this, so if the compositor runs then so does
+Nimbus. Verified on 0.56.
 
-Focus tracking speaks Hyprland's IPC. Sway and Niri need a backend adding; the
-trait they would implement is already there.
+Focus tracking speaks Hyprland's IPC. Sway and Niri offer the same layer-shell
+protocol and need only a focus backend adding; the trait they would implement
+is already there.
 
 ### Following a window that moves
 
@@ -108,7 +114,8 @@ its own surface, which is what [SPEC.md](SPEC.md) describes and what
 
 The plugin ABI is unstable and breaks on compositor releases, so a plugin needs
 maintaining forever. A layer-shell client depends only on a stable protocol and
-works unchanged on other wlroots compositors, so Sway and Niri come nearly free.
+works unchanged on any compositor that speaks it, so Sway and Niri come nearly
+free.
 
 ## Contributing
 
