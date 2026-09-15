@@ -11,6 +11,11 @@ into the wrong window.
 The same shader as the Mac, ported from the Metal original, drawn on a
 `wlr-layer-shell` surface. Runs on Hyprland today.
 
+https://github.com/user-attachments/assets/6b9e4b62-aeab-4b84-a1a5-659871354e7c
+
+https://github.com/user-attachments/assets/db8752e8-a456-484a-8d6b-23c692101b00
+
+
 ## Install
 
 ```sh
