@@ -22,7 +22,7 @@ optdepends=('omarchy: bar control panel (run `nimbus-wayland install-bar`)')
 
 install="${pkgname}.install"
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('SKIP')  # replaced with the real digest when the tag is cut
+sha256sums=('3931a27a6547ba108be7a1f2e1d5fc2fd8ee93751c334f04cfda9f565b40884e')
 
 prepare() {
   cd "${pkgname}-${pkgver}/overlay"

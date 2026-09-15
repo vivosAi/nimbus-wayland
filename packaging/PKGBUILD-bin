@@ -20,7 +20,7 @@ optdepends=('omarchy: bar control panel (run `nimbus-wayland install-bar`)')
 
 install="${_pkgname}.install"
 source_x86_64=("${_pkgname}-${pkgver}-x86_64.tar.gz::${url}/releases/download/v${pkgver}/${_pkgname}-${pkgver}-x86_64.tar.gz")
-sha256sums_x86_64=('SKIP')   # replaced with the real digest when the release is cut
+sha256sums_x86_64=('67c79ea15124fe69c7c2622ac20b13ac19c52d564e36ae0485de6cf815de298c')
 
 package() {
   # The tarball unpacks into a versioned directory, as build-release.sh makes it.
