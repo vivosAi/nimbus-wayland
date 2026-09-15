@@ -40,9 +40,9 @@ if [ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
   echo
 fi
 
+# Only x86_64 has a prebuilt tarball so far.
 case "$(uname -m)" in
   x86_64)  ARCH=x86_64 ;;
-  aarch64) ARCH=aarch64 ;;
   *) die "no prebuilt binary for $(uname -m). Build from source:
   git clone https://github.com/$REPO && cd nimbus-wayland/overlay && cargo build --release" ;;
 esac
@@ -96,20 +96,23 @@ if [ -z "${INSTALLED_BY_PACKAGE:-}" ]; then
   fi
 
   tar -xzf "$TMP/$TARBALL" -C "$TMP"
+  # The tarball unpacks into a versioned directory, as build-release.sh makes it.
+  SRC="$TMP/${TARBALL%.tar.gz}"
+  [ -f "$SRC/$BIN_NAME" ] || die "unexpected tarball layout: no $BIN_NAME in ${TARBALL%.tar.gz}/"
 
-  install -Dm755 "$TMP/$BIN_NAME" "$PREFIX/bin/$BIN_NAME"
-  install -Dm644 "$TMP/$BIN_NAME.service" \
+  install -Dm755 "$SRC/$BIN_NAME" "$PREFIX/bin/$BIN_NAME"
+  install -Dm644 "$SRC/$BIN_NAME.service" \
     "${XDG_DATA_HOME:-$HOME/.local/share}/systemd/user/$BIN_NAME.service"
   # The unit ships with an absolute /usr/bin path for the packaged install.
   sed -i "s|/usr/bin/$BIN_NAME|$PREFIX/bin/$BIN_NAME|" \
     "${XDG_DATA_HOME:-$HOME/.local/share}/systemd/user/$BIN_NAME.service"
 
-  if [ -d "$TMP/omarchy" ]; then
+  if [ -d "$SRC/omarchy" ]; then
     mkdir -p "$PREFIX/share/nimbus-wayland"
-    cp -r "$TMP/omarchy" "$PREFIX/share/nimbus-wayland/"
+    cp -r "$SRC/omarchy" "$PREFIX/share/nimbus-wayland/"
   fi
-  [ -f "$TMP/config.example.json" ] \
-    && install -Dm644 "$TMP/config.example.json" \
+  [ -f "$SRC/config.example.json" ] \
+    && install -Dm644 "$SRC/config.example.json" \
        "$PREFIX/share/nimbus-wayland/config.example.json"
 
   note "installed to $PREFIX/bin/$BIN_NAME"

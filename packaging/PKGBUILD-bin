@@ -8,7 +8,8 @@ _pkgname=nimbus-wayland
 pkgver=0.1.0
 pkgrel=1
 pkgdesc="Draws an animated ring of light around the window that has keyboard focus (prebuilt)"
-arch=('x86_64' 'aarch64')
+# Only x86_64 has a prebuilt tarball; aarch64 builds from the source package.
+arch=('x86_64')
 url="https://github.com/vivosAi/nimbus-wayland"
 license=('MIT')
 
@@ -19,11 +20,12 @@ optdepends=('omarchy: bar control panel (run `nimbus-wayland install-bar`)')
 
 install="${_pkgname}.install"
 source_x86_64=("${_pkgname}-${pkgver}-x86_64.tar.gz::${url}/releases/download/v${pkgver}/${_pkgname}-${pkgver}-x86_64.tar.gz")
-source_aarch64=("${_pkgname}-${pkgver}-aarch64.tar.gz::${url}/releases/download/v${pkgver}/${_pkgname}-${pkgver}-aarch64.tar.gz")
 sha256sums_x86_64=('SKIP')   # replaced with the real digest when the release is cut
-sha256sums_aarch64=('SKIP')
 
 package() {
+  # The tarball unpacks into a versioned directory, as build-release.sh makes it.
+  cd "${_pkgname}-${pkgver}-${CARCH}"
+
   install -Dm755 nimbus-wayland "${pkgdir}/usr/bin/nimbus-wayland"
   install -Dm644 nimbus-wayland.service \
     "${pkgdir}/usr/lib/systemd/user/nimbus-wayland.service"

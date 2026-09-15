@@ -36,6 +36,9 @@ cp -r omarchy/nimbus.ring                           "$OUT/$NAME/omarchy/"
 
 strip "$OUT/$NAME/nimbus-wayland" 2>/dev/null || true
 
+# One versioned directory at the top of the archive, so unpacking by hand does
+# not spray files into the current directory. PKGBUILD-bin and install.sh both
+# cd into it; change one and change all three.
 ( cd "$OUT" && tar -czf "${NAME}.tar.gz" "$NAME" )
 rm -rf "$OUT/$NAME"
 
@@ -50,4 +53,5 @@ echo "  dist/SHA256SUMS"
 echo
 echo "Next:"
 echo "  gh release create v${VERSION} dist/${NAME}.tar.gz dist/SHA256SUMS \\"
-echo "    --title 'Nimbus ${VERSION}' --notes-file CHANGELOG.md"
+echo "    --title 'Nimbus ${VERSION}' --notes 'What changed'"
+echo "  sha256sum dist/${NAME}.tar.gz   # then paste into packaging/PKGBUILD-bin"
